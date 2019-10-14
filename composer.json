@@ -1,10 +1,11 @@
 {
-  "name": "ccinn/kafka-swoole",
-  "description": "Kafka client for php",
-  "type": "library",
+  "name": "ccinn/kafka-swoole-core",
+  "description": "Kafka-swoole's core",
+  "type": "framework",
   "keywords": [
-    "Client",
-    "Kafka"
+    "client",
+    "kafka-swoole",
+    "kafka"
   ],
   "config": {
     "platform": {
