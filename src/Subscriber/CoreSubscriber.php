@@ -233,139 +233,6 @@ class CoreSubscriber implements EventSubscriberInterface
 
         // JoinGroup...
         $this->rebalance($commonConfig, $socket);
-        // ListsOffsets...
-        $topicsPartitionLeader = Kafka::getInstance()->getTopicsPartitionLeader();
-        $point = [];
-        foreach (ClientKafka::getInstance()->getSelfTopicPartition() as $topic => $partitions) {
-            $topicsListsOffsets = (new TopicsListsOffsets())->setTopic(String16::value($topic));
-            foreach ($partitions as $partition) {
-                $partitionsListsOffsets = (new PartitionsListsOffsets())->setPartition(Int32::value($partition))
-                                                                        ->setTimestamp(Int64::value(-1));
-                $point[$topicsPartitionLeader[$topic][$partition]][$topic][$partition] = [
-                    'topicsListsOffsets'     => $topicsListsOffsets,
-                    'partitionsListsOffsets' => $partitionsListsOffsets
-                ];
-            }
-        }
-
-        $topics = [];
-        foreach ($point as $leader => $topicPartition) {
-            $listOffsetsRequest = new ListOffsetsRequest();
-            $socket = new Socket();
-            foreach ($topicPartition as $topic => $compositePartitions) {
-                $partitionsListsOffsetsArray = [];
-                foreach ($compositePartitions as $partition => $structure) {
-                    ClientKafka::getInstance()->setTopicPartitionSocket($topic, $partition, $socket);
-                    ['topicsListsOffsets' => $topicsListsOffsets, 'partitionsListsOffsets' => $partitionsListsOffsets] = $structure;
-                    $partitionsListsOffsetsArray[] = $partitionsListsOffsets;
-                }
-                $topicsListsOffsets->setPartitions($partitionsListsOffsetsArray);
-                $topics[] = $topicsListsOffsets;
-            }
-            $listOffsetsRequest->setTopics($topics);
-            $data = $listOffsetsRequest->pack();
-            ['host' => $host, 'port' => $port] = Kafka::getInstance()->getBrokerInfoByNodeId($leader);
-            $socket->connect($host, $port)->send($data);
-            $socket->revcByKafka($listOffsetsRequest);
-            /** @var ListOffsetsResponse $response */
-            $response = $listOffsetsRequest->response;
-            foreach ($response->getResponses() as $response) {
-                foreach ($response->getPartitionResponses() as $partitionResponse) {
-                    if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-                        throw new ListOffsetsRequestException(sprintf('ListOffsetRequest request error, the error message is: %s',
-                            ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
-                    }
-
-                    if (count($partitionResponse->getOffsets()) > 1) {
-                        [$offset, $highWatermark] = $partitionResponse->getOffsets();
-                        $offset = $offset->getValue();
-                        $highWatermark = $highWatermark->getValue();
-                    } else {
-                        $offset = current($partitionResponse->getOffsets())->getValue();
-                        $highWatermark = $offset;
-                    }
-                    ClientKafka::getInstance()->setTopicPartitionListOffsets(
-                        $response->getTopic()->getValue(),
-                        $partitionResponse->getPartition()->getValue(),
-                        $offset,
-                        $highWatermark
-                    );
-                }
-            }
-
-            // OffsetFetch...
-            $offsetFetchRequest = new OffsetFetchRequest();
-            $offsetFetchRequest->setGroupId(String16::value($commonConfig->getGroupId()));
-            $setTopics = [];
-            foreach (ClientKafka::getInstance()->getSelfTopicPartition() as $topic => $partitions) {
-                $topicsOffsetFetch = (new TopicsOffsetFetch())->setTopic(String16::value($topic));
-                $setPartitions = [];
-                foreach ($partitions as $partition) {
-                    $setPartitions[] = (new PartitionsOffsetFetch())->setPartition(Int32::value($partition));
-                }
-                $setTopics[] = $topicsOffsetFetch->setPartitions($setPartitions);
-            }
-            $offsetFetchRequest->setTopics($setTopics);
-            $data = $offsetFetchRequest->pack();
-            $socket = ClientKafka::getInstance()->getOffsetConnectSocket();
-            $socket->send($data);
-            $socket->revcByKafka($offsetFetchRequest);
-
-            /** @var OffsetFetchResponse $response */
-            $response = $offsetFetchRequest->response;
-            try {
-                $needChangeApiVersion = [];
-                foreach ($response->getResponses() as $response) {
-                    foreach ($response->getPartitionResponses() as $partitionResponse) {
-                        // need change api version
-                        if ($partitionResponse->getOffset()->getValue() === -1 && $partitionResponse->getMetadata()
-                                                                                                    ->getValue() === '') {
-                            $needChangeApiVersion[] = true;
-                        } else {
-                            if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-                                throw new OffsetFetchRequestException(sprintf('Api Version 0, OffsetFetchRequest request error, the error message is: %s',
-                                    ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
-                            }
-                        }
-                        $needChangeApiVersion[] = false;
-
-                        ClientKafka::getInstance()->setTopicPartitionOffset(
-                            $response->getTopic()->getValue(),
-                            $partitionResponse->getPartition()->getValue(),
-                            $partitionResponse->getOffset()->getValue()
-                        );
-
-                    }
-                }
-                if (count(array_unique($needChangeApiVersion)) === 1 && current($needChangeApiVersion) === true) {
-                    throw new ClientException(
-                        sprintf('Offset does not exist in zookeeper, but in kafka. Therefore, API version needs to be changed')
-                    );
-                }
-            } catch (ClientException $exception) {
-                $offsetFetchRequest->getRequestHeader()
-                                   ->setApiVersion(Int16::value(ProtocolVersionEnum::API_VERSION_1));
-                $data = $offsetFetchRequest->pack();
-                $socket->send($data);
-                $socket->revcByKafka($offsetFetchRequest);
-                /** @var OffsetFetchResponse $response */
-                $response = $offsetFetchRequest->response;
-                foreach ($response->getResponses() as $response) {
-                    foreach ($response->getPartitionResponses() as $partitionResponse) {
-                        if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-                            throw new OffsetFetchRequestException(sprintf('Api Version 1, OffsetFetchRequest request error, the error message is: %s',
-                                ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
-                        }
-
-                        ClientKafka::getInstance()->setTopicPartitionOffset(
-                            $response->getTopic()->getValue(),
-                            $partitionResponse->getPartition()->getValue(),
-                            $partitionResponse->getOffset()->getValue()
-                        );
-                    }
-                }
-            }
-        }
     }
 
     /**
@@ -386,6 +253,10 @@ class CoreSubscriber implements EventSubscriberInterface
                 // fetch data
                 $fetchRequest = new FetchRequest();
 
+                if (ClientKafka::getInstance()->isRebalancing()) {
+                    \co::sleep(1);
+                    continue;
+                }
                 foreach (ClientKafka::getInstance()->getSelfLeaderTopicPartition() as $leaderId => $topicPartitions) {
                     $setTopics = [];
                     foreach ($topicPartitions as $topic => $partitions) {
@@ -467,7 +338,7 @@ class CoreSubscriber implements EventSubscriberInterface
      * @throws SyncGroupRequestException
      * @throws \Kafka\Exception\Socket\NormalSocketConnectException
      */
-    private function rebalance($commonConfig, $socket): array
+    private function rebalance($commonConfig, $socket)
     {
         Rebalance:
         ClientKafka::getInstance()->setIsRebalancing(true);
@@ -659,9 +530,139 @@ class CoreSubscriber implements EventSubscriberInterface
         ClientKafka::getInstance()->setSelfTopicPartition($selfTopicPartition);
         ClientKafka::getInstance()->setSelfLeaderTopicPartition($selfLeaderTopicPartition);
 
-        ClientKafka::getInstance()->setIsRebalancing(false);
+        // ListsOffsets...
+        $topicsPartitionLeader = Kafka::getInstance()->getTopicsPartitionLeader();
+        $point = [];
+        foreach (ClientKafka::getInstance()->getSelfTopicPartition() as $topic => $partitions) {
+            $topicsListsOffsets = (new TopicsListsOffsets())->setTopic(String16::value($topic));
+            foreach ($partitions as $partition) {
+                $partitionsListsOffsets = (new PartitionsListsOffsets())->setPartition(Int32::value($partition))
+                                                                        ->setTimestamp(Int64::value(-1));
+                $point[$topicsPartitionLeader[$topic][$partition]][$topic][$partition] = [
+                    'topicsListsOffsets'     => $topicsListsOffsets,
+                    'partitionsListsOffsets' => $partitionsListsOffsets
+                ];
+            }
+        }
 
-//        return [$data, $response, $topics, $topic, $partitions, $socket, $partition];
-        return [];
+        $topics = [];
+        foreach ($point as $leader => $topicPartition) {
+            $listOffsetsRequest = new ListOffsetsRequest();
+            $socket = new Socket();
+            foreach ($topicPartition as $topic => $compositePartitions) {
+                $partitionsListsOffsetsArray = [];
+                foreach ($compositePartitions as $partition => $structure) {
+                    ClientKafka::getInstance()->setTopicPartitionSocket($topic, $partition, $socket);
+                    ['topicsListsOffsets' => $topicsListsOffsets, 'partitionsListsOffsets' => $partitionsListsOffsets] = $structure;
+                    $partitionsListsOffsetsArray[] = $partitionsListsOffsets;
+                }
+                $topicsListsOffsets->setPartitions($partitionsListsOffsetsArray);
+                $topics[] = $topicsListsOffsets;
+            }
+            $listOffsetsRequest->setTopics($topics);
+            $data = $listOffsetsRequest->pack();
+            ['host' => $host, 'port' => $port] = Kafka::getInstance()->getBrokerInfoByNodeId($leader);
+            $socket->connect($host, $port)->send($data);
+            $socket->revcByKafka($listOffsetsRequest);
+            /** @var ListOffsetsResponse $response */
+            $response = $listOffsetsRequest->response;
+            foreach ($response->getResponses() as $response) {
+                foreach ($response->getPartitionResponses() as $partitionResponse) {
+                    if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
+                        throw new ListOffsetsRequestException(sprintf('ListOffsetRequest request error, the error message is: %s',
+                            ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
+                    }
+
+                    if (count($partitionResponse->getOffsets()) > 1) {
+                        [$offset, $highWatermark] = $partitionResponse->getOffsets();
+                        $offset = $offset->getValue();
+                        $highWatermark = $highWatermark->getValue();
+                    } else {
+                        $offset = current($partitionResponse->getOffsets())->getValue();
+                        $highWatermark = $offset;
+                    }
+                    ClientKafka::getInstance()->setTopicPartitionListOffsets(
+                        $response->getTopic()->getValue(),
+                        $partitionResponse->getPartition()->getValue(),
+                        $offset,
+                        $highWatermark
+                    );
+                }
+            }
+
+            // OffsetFetch...
+            $offsetFetchRequest = new OffsetFetchRequest();
+            $offsetFetchRequest->setGroupId(String16::value($commonConfig->getGroupId()));
+            $setTopics = [];
+            foreach (ClientKafka::getInstance()->getSelfTopicPartition() as $topic => $partitions) {
+                $topicsOffsetFetch = (new TopicsOffsetFetch())->setTopic(String16::value($topic));
+                $setPartitions = [];
+                foreach ($partitions as $partition) {
+                    $setPartitions[] = (new PartitionsOffsetFetch())->setPartition(Int32::value($partition));
+                }
+                $setTopics[] = $topicsOffsetFetch->setPartitions($setPartitions);
+            }
+            $offsetFetchRequest->setTopics($setTopics);
+            $data = $offsetFetchRequest->pack();
+            $socket = ClientKafka::getInstance()->getOffsetConnectSocket();
+            $socket->send($data);
+            $socket->revcByKafka($offsetFetchRequest);
+
+            /** @var OffsetFetchResponse $response */
+            $response = $offsetFetchRequest->response;
+            try {
+                $needChangeApiVersion = [];
+                foreach ($response->getResponses() as $response) {
+                    foreach ($response->getPartitionResponses() as $partitionResponse) {
+                        // need change api version
+                        if ($partitionResponse->getOffset()->getValue() === -1 && $partitionResponse->getMetadata()
+                                                                                                    ->getValue() === '') {
+                            $needChangeApiVersion[] = true;
+                        } else {
+                            if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
+                                throw new OffsetFetchRequestException(sprintf('Api Version 0, OffsetFetchRequest request error, the error message is: %s',
+                                    ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
+                            }
+                        }
+                        $needChangeApiVersion[] = false;
+
+                        ClientKafka::getInstance()->setTopicPartitionOffset(
+                            $response->getTopic()->getValue(),
+                            $partitionResponse->getPartition()->getValue(),
+                            $partitionResponse->getOffset()->getValue()
+                        );
+
+                    }
+                }
+                if (count(array_unique($needChangeApiVersion)) === 1 && current($needChangeApiVersion) === true) {
+                    throw new ClientException(
+                        sprintf('Offset does not exist in zookeeper, but in kafka. Therefore, API version needs to be changed')
+                    );
+                }
+            } catch (ClientException $exception) {
+                $offsetFetchRequest->getRequestHeader()
+                                   ->setApiVersion(Int16::value(ProtocolVersionEnum::API_VERSION_1));
+                $data = $offsetFetchRequest->pack();
+                $socket->send($data);
+                $socket->revcByKafka($offsetFetchRequest);
+                /** @var OffsetFetchResponse $response */
+                $response = $offsetFetchRequest->response;
+                foreach ($response->getResponses() as $response) {
+                    foreach ($response->getPartitionResponses() as $partitionResponse) {
+                        if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
+                            throw new OffsetFetchRequestException(sprintf('Api Version 1, OffsetFetchRequest request error, the error message is: %s',
+                                ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
+                        }
+
+                        ClientKafka::getInstance()->setTopicPartitionOffset(
+                            $response->getTopic()->getValue(),
+                            $partitionResponse->getPartition()->getValue(),
+                            $partitionResponse->getOffset()->getValue()
+                        );
+                    }
+                }
+            }
+        }
+        ClientKafka::getInstance()->setIsRebalancing(false);
     }
 }
