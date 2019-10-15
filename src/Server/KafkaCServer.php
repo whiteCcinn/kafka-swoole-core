@@ -11,6 +11,7 @@ use Kafka\ClientKafka;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
+use Kafka\Event\ProcessExitEvent;
 use Kafka\Event\SinkerEvent;
 use Kafka\Event\SinkerOtherEvent;
 use Swoole\Process;
@@ -88,9 +89,9 @@ class KafkaCServer
                 echo "Accept: \n";
                 $client = $this->server->accept();
                 if ($client === false) {
-                    var_dump($this->server->errCode);
+                    exit(1);
                 } else {
-                    var_dump($client);
+                    exit(2);
                 }
             }
         });
@@ -166,7 +167,7 @@ class KafkaCServer
         }
         $process = new Process(function (Process $process) {
             swoole_set_process_name($this->getProcessName('sinker'));
-            Runtime::enableCoroutine(true, SWOOLE_HOOK_FILE);
+            Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
             go(function () {
                 dispatch(new SinkerOtherEvent(), SinkerOtherEvent::NAME);
@@ -176,6 +177,15 @@ class KafkaCServer
             swoole_event_add($process->pipe, function () use ($process) {
                 $msg = $process->read();
                 var_dump($msg);
+            });
+
+            go(function () use ($process) {
+                while (true) {
+                    $this->checkMasterPid($process);
+                    echo sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
+                        getmypid(), 60);
+                    co::sleep(60);
+                }
             });
 
             // Sinker Logic
@@ -207,21 +217,18 @@ class KafkaCServer
         }
         $process = new Process(function (Process $process) {
             swoole_set_process_name($this->getProcessName());
+            Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
             Process::signal(SIGINT, function () use ($process) {
-                if (ClientKafka::getInstance()->isJoined()) {
-                    LeaveGroupApi::getInstance()
-                                 ->leave(App::$commonConfig->getGroupId(), ClientKafka::getInstance()->getMemberId());
-                }
-                $process->exit(0);
+                go(function () use ($process) {
+                    $this->leaveGroup($process);
+                });
             });
 
             Process::signal(SIGTERM, function () use ($process) {
-                if (ClientKafka::getInstance()->isJoined()) {
-                    LeaveGroupApi::getInstance()
-                                 ->leave(App::$commonConfig->getGroupId(), ClientKafka::getInstance()->getMemberId());
-                }
-                $process->exit(0);
+                go(function () use ($process) {
+                    $this->leaveGroup($process);
+                });
             });
 
             // Receiving process messages
@@ -254,9 +261,38 @@ class KafkaCServer
         return $pid;
     }
 
+    /**
+     * @param Process $process
+     */
+    public function leaveGroup(Process $process): void
+    {
+        if (ClientKafka::getInstance()->isJoined()) {
+            LeaveGroupApi::getInstance()
+                         ->leave(App::$commonConfig->getGroupId(),
+                             ClientKafka::getInstance()->getMemberId());
+        }
+        $process->exit(0);
+    }
+
+    /**
+     * @param Process $process
+     */
     public function checkMasterPid(Process $process)
     {
+        static $memory_limit;
+        // check memory，free memory
+        if (empty($memory_limit) && preg_match('/(?<member_limit_mb>\d+)M/', ini_get('memory_limit'), $matches)) {
+            $memory_limit = $matches['member_limit_mb'];
+        }
+
+        $memory = round(memory_get_usage() / 1024 / 1024, 2);
+        if ($memory / $memory_limit > 0.9) {
+            dispatch(new ProcessExitEvent(), ProcessExitEvent::NAME);
+            $process->exit(0);
+        }
+
         if (!Process::kill($this->masterPid, 0)) {
+            dispatch(new ProcessExitEvent(), ProcessExitEvent::NAME);
             $process->exit(0);
         }
     }

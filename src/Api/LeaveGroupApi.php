@@ -2,12 +2,12 @@
 
 namespace Kafka\Api;
 
-use Kafka\ClientKafka;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Kafka;
 use Kafka\Protocol\Request\LeaveGroupRequest;
 use Kafka\Protocol\Response\LeaveGroupResponse;
 use Kafka\Protocol\Type\String16;
+use Kafka\Socket\Socket;
 
 class LeaveGroupApi extends AbstractApi
 {
@@ -22,13 +22,17 @@ class LeaveGroupApi extends AbstractApi
         $protocol = new LeaveGroupRequest();
         $protocol->setGroupId(String16::value($groupId))->setMemberId(String16::value($memberId));
         $data = $protocol->pack();
-        $socket = ClientKafka::getInstance()->getOffsetConnectSocket();
-        $socket->send($data);
-        $socket->revcByKafka($protocol);
-        /** @var LeaveGroupResponse $responses */
-        $responses = $protocol->response;
-        if ($responses->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-            throw new \RuntimeException(sprintf('%s leave group %s fail', $memberId, $groupId));
+        foreach (Kafka::getInstance()->getBrokers() as $info) {
+            ['host' => $host, 'port' => $port] = $info;
+            $socket = new Socket();
+            $socket->connect($host, $port)->send($data);
+            $socket->revcByKafka($protocol);
+            $socket->close();
+            /** @var LeaveGroupResponse $responses */
+            $responses = $protocol->response;
+            if ($responses->getErrorCode()->getValue() === ProtocolErrorEnum::NO_ERROR) {
+                break;
+            }
         }
 
         return true;
