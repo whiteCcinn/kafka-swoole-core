@@ -56,7 +56,7 @@ class ProtocolEnum extends AbstractEnum
     /**
      * @message("LeaveGroup")
      */
-    public const LeaveGroup = 13;
+    public const LEAVE_GROUP = 13;
 
     /**
      * @message("SyncGroup")
