@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Server;
 
+use App\App;
 use App\Handler\HighLevelHandler;
 use Co\Socket;
 use Kafka\Api\LeaveGroupApi;
