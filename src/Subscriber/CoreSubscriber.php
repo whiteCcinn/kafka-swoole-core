@@ -341,7 +341,7 @@ class CoreSubscriber implements EventSubscriberInterface
     private function rebalance($commonConfig, $socket)
     {
         Rebalance:
-        ClientKafka::getInstance()->setIsRebalancing(true);
+        ClientKafka::getInstance()->setIsRebalancing(true)->setIsJoined(false);
         $joinGroupRequest = new JoinGroupRequest();
         $subscriptions = [];
         foreach (explode(',', $commonConfig->getTopicNames()) as $topicName) {
@@ -663,6 +663,6 @@ class CoreSubscriber implements EventSubscriberInterface
                 }
             }
         }
-        ClientKafka::getInstance()->setIsRebalancing(false);
+        ClientKafka::getInstance()->setIsRebalancing(false)->setIsJoined(true);
     }
 }

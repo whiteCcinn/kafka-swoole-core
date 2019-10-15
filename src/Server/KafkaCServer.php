@@ -5,8 +5,8 @@ namespace Kafka\Server;
 
 use App\Handler\HighLevelHandler;
 use Co\Socket;
-use http\Exception\RuntimeException;
-use Kafka\Enum\ClientApiModeEnum;
+use Kafka\Api\LeaveGroupApi;
+use Kafka\ClientKafka;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
@@ -207,13 +207,21 @@ class KafkaCServer
         $process = new Process(function (Process $process) {
             swoole_set_process_name($this->getProcessName());
 
-//            Process::signal(SIGINT, function () {
-//                // 退出消费者组
-//            });
-//
-//            Process::signal(SIGTERM, function () {
-//                // 退出消费者组
-//            });
+            Process::signal(SIGINT, function () use ($process) {
+                if (ClientKafka::getInstance()->isJoined()) {
+                    LeaveGroupApi::getInstance()
+                                 ->leave(App::$commonConfig->getGroupId(), ClientKafka::getInstance()->getMemberId());
+                }
+                $process->exit(0);
+            });
+
+            Process::signal(SIGTERM, function () use ($process) {
+                if (ClientKafka::getInstance()->isJoined()) {
+                    LeaveGroupApi::getInstance()
+                                 ->leave(App::$commonConfig->getGroupId(), ClientKafka::getInstance()->getMemberId());
+                }
+                $process->exit(0);
+            });
 
             // Receiving process messages
             swoole_event_add($process->pipe, function () use ($process) {

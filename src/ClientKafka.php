@@ -117,6 +117,9 @@ class ClientKafka
      */
     private $isRebalancing = false;
 
+    /** @var bool $isJoined */
+    private $isJoined = false;
+
     /**
      * @param int $nodeId
      *
@@ -493,6 +496,26 @@ class ClientKafka
     public function setIsRebalancing(bool $isRebalancing): ClientKafka
     {
         $this->isRebalancing = $isRebalancing;
+
+        return $this;
+    }
+
+    /**
+     * @return bool
+     */
+    public function isJoined(): bool
+    {
+        return $this->isJoined;
+    }
+
+    /**
+     * @param bool $isJoined
+     *
+     * @return ClientKafka
+     */
+    public function setIsJoined(bool $isJoined): ClientKafka
+    {
+        $this->isJoined = $isJoined;
 
         return $this;
     }
