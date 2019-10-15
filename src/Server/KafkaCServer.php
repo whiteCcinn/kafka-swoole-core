@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace Kafka\Server;
 
 use App\Handler\HighLevelHandler;
+use Co\Socket;
+use http\Exception\RuntimeException;
 use Kafka\Enum\ClientApiModeEnum;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
@@ -26,11 +28,6 @@ class KafkaCServer
      * @var Server $server
      */
     private $server;
-
-    /**
-     * @var array $callBackFunc
-     */
-    private $callBackFunc = [];
 
     /**
      * @var int $masterPid
@@ -62,24 +59,12 @@ class KafkaCServer
      */
     private function __construct()
     {
-        if (!$this->server instanceof Server) {
-            $this->server = new Server(env('SERVER_IP'), (int)env('SERVER_PORT'), SWOOLE_PROCESS, SWOOLE_TCP);
-            swoole_set_process_name($this->getMasterName());
-            $this->callBackFunc = [
-                'ManagerStart' => [$this, 'onManagerStart'],
-                'WorkerStart'  => [$this, 'onWorkerStart'],
-                'Receive'      => [$this, 'onReceive']
-            ];
-            $this->server->set([
-                'reactor_num' => env('SERVER_REACTOR_NUM', 1),
-                'worker_num'  => env('SERVER_WORKER_NUM', 1),
-                'max_request' => env('SERVER_MAX_REQUEST', 50),
-            ]);
-            foreach ($this->callBackFunc as $name => $fn) {
-                $this->server->on($name, $fn);
-            }
-            $this->masterPid = posix_getpid();
-        }
+        swoole_set_process_name($this->getMasterName());
+
+        $this->server = new Socket(AF_INET, SOCK_STREAM, 0);
+        $this->server->bind(env('SERVER_IP'), (int)env('SERVER_PORT'));
+        $this->server->listen(128);
+        $this->masterPid = posix_getpid();
     }
 
     /**
@@ -87,7 +72,7 @@ class KafkaCServer
      */
     public static function getInstance(): KafkaCServer
     {
-        if (!self::$instance instanceof KafkaCServer) {
+        if (!self::$instance instanceof self) {
             self::$instance = new self();
         }
 
@@ -96,13 +81,56 @@ class KafkaCServer
 
     public function start(): void
     {
-        $this->getServer()->start();
+        $this->registerSignal();
+        go(function () {
+            while (true) {
+                echo "Accept: \n";
+                $client = $this->server->accept();
+                if ($client === false) {
+                    var_dump($this->server->errCode);
+                } else {
+                    var_dump($client);
+                }
+            }
+        });
+    }
+
+    private function registerSignal()
+    {
+        // Recycle child process
+        Process::signal(SIGCHLD, [$this, 'processWait']);
+
+        Process::signal(SIGINT, [$this, 'closeProcess']);
+
+        Process::signal(SIGTERM, [$this, 'closeProcess']);
     }
 
     /**
-     * @return Server
+     * @return bool
      */
-    public function getServer(): Server
+    public function closeProcess(): bool
+    {
+        $process = array_merge($this->sinkerProcesses, $this->kafkaProcesses);
+        $ret = [];
+        foreach ($process as $pid) {
+            if (Process::kill($pid, 0)) {
+                $ret[] = Process::kill($pid, SIGTERM);
+            }
+        }
+
+        if (count($ret) === count($process)) {
+            exit(0);
+        } else {
+            exit(1);
+        }
+
+        return true;
+    }
+
+    /**
+     * @return Socket
+     */
+    public function getServer(): Socket
     {
         return $this->server;
     }
@@ -110,19 +138,6 @@ class KafkaCServer
     public function onManagerStart()
     {
         swoole_set_process_name($this->getManagerName());
-    }
-
-    /**
-     * @param Server $server
-     * @param int    $workerId
-     */
-    public function onWorkerStart(Server $server, int $workerId): void
-    {
-        if ($workerId >= $server->setting['worker_num']) {
-            swoole_set_process_name($this->getTaskerName($workerId));
-        } else {
-            swoole_set_process_name($this->getWorkerName($workerId));
-        }
     }
 
     public function onReceive($serv, $fd, $reactor_id, $data)
@@ -144,13 +159,13 @@ class KafkaCServer
 
     public function createSinkerProcess($index = null)
     {
-        $process = new Process(function (Process $process) use (&$index) {
-            if (is_null($index)) {
-                $index = $this->nextSinkerIndex;
-                $this->nextSinkerIndex++;
-            }
+        if (is_null($index)) {
+            $index = $this->nextSinkerIndex;
+            $this->nextSinkerIndex++;
+        }
+        $process = new Process(function (Process $process) {
             swoole_set_process_name($this->getProcessName('sinker'));
-            Runtime::enableCoroutine(true,SWOOLE_HOOK_FILE);
+            Runtime::enableCoroutine(true, SWOOLE_HOOK_FILE);
 
             go(function () {
                 dispatch(new SinkerOtherEvent(), SinkerOtherEvent::NAME);
@@ -185,12 +200,20 @@ class KafkaCServer
 
     public function createKafkaProcess($index = null)
     {
-        $process = new Process(function (Process $process) use (&$index) {
-            if (is_null($index)) {
-                $index = $this->nextKafkaIndex;
-                $this->nextKafkaIndex++;
-            }
+        if (is_null($index)) {
+            $index = $this->nextKafkaIndex;
+            $this->nextKafkaIndex++;
+        }
+        $process = new Process(function (Process $process) {
             swoole_set_process_name($this->getProcessName());
+
+//            Process::signal(SIGINT, function () {
+//                // 退出消费者组
+//            });
+//
+//            Process::signal(SIGTERM, function () {
+//                // 退出消费者组
+//            });
 
             // Receiving process messages
             swoole_event_add($process->pipe, function () use ($process) {
@@ -225,7 +248,7 @@ class KafkaCServer
     public function checkMasterPid(Process $process)
     {
         if (!Process::kill($this->masterPid, 0)) {
-            $process->exit();
+            $process->exit(0);
         }
     }
 
@@ -241,30 +264,52 @@ class KafkaCServer
         if ($index !== false) {
             $index = intval($index);
             $new_pid = $this->createKafkaProcess($index);
-            echo "rebootProcess: {$index}={$new_pid} Done\n";
+            echo "rebootKafkaProcess: {$index}={$new_pid} Done\n";
 
             return;
         }
-        throw new \Exception('rebootProcess Error: no pid');
+        throw new \Exception('rebootKafkaProcess Error: no pid');
+    }
+
+    /**
+     * @param $ret
+     *
+     * @throws \Exception
+     */
+    public function rebootSinkerProcess($ret)
+    {
+        $pid = $ret['pid'];
+        $index = array_search($pid, $this->sinkerProcesses);
+        if ($index !== false) {
+            $index = intval($index);
+            $new_pid = $this->createSinkerProcess($index);
+            echo "rebootSinkerProcess: {$index}={$new_pid} Done\n";
+
+            return;
+        }
+        throw new \Exception('rebootSinkerProcess Error: no pid');
     }
 
     /**
      * @throws \Exception
      */
-    public function processWait()
+    public function processWait($sig)
     {
-        while (1) {
-            if (count($this->kafkaProcesses)) {
-                $ret = Process::wait();
-                if ($ret) {
+        while ($ret = Process::wait(false)) {
+            $pid = $ret['pid'];
+            $index = array_search($pid, $this->sinkerProcesses);
+            if ($index === false) {
+                $index = array_search($pid, $this->kafkaProcesses);
+                if ($index !== false) {
                     $this->rebootKafkaProcess($ret);
+                } else {
+                    throw new \RuntimeException('reboot error');
                 }
             } else {
-                break;
+                $this->rebootSinkerProcess($ret);
             }
         }
     }
-
 
     /**
      * @param string $type
@@ -275,7 +320,6 @@ class KafkaCServer
     {
         return env('APP_NAME') . ':process' . ":{$type}";
     }
-
 
     /**
      * @return string
@@ -291,25 +335,5 @@ class KafkaCServer
     private function getManagerName(): string
     {
         return env('APP_NAME') . ':manager';
-    }
-
-    /**
-     * @param int $workerId
-     *
-     * @return string
-     */
-    private function getWorkerName(int $workerId): string
-    {
-        return env('APP_NAME') . ":worker:{$workerId}";
-    }
-
-    /**
-     * @param int $workerId
-     *
-     * @return string
-     */
-    private function getTaskerName(int $workerId): string
-    {
-        return env('APP_NAME') . ":tasker:{$workerId}";
     }
 }
