@@ -54,6 +54,11 @@ class ProtocolEnum extends AbstractEnum
     public const HEARTBEAT = 12;
 
     /**
+     * @message("LeaveGroup")
+     */
+    public const LeaveGroup = 13;
+
+    /**
      * @message("SyncGroup")
      */
     public const SYNC_GROUP = 14;
