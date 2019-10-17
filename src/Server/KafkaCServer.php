@@ -8,12 +8,15 @@ use App\Handler\HighLevelHandler;
 use Co\Socket;
 use Kafka\Api\LeaveGroupApi;
 use Kafka\ClientKafka;
+use Kafka\Enum\RpcRoleEnum;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
 use Kafka\Event\ProcessExitEvent;
 use Kafka\Event\SinkerEvent;
 use Kafka\Event\SinkerOtherEvent;
+use Kafka\RPC\BaseRpc;
+use Kafka\Support\Str;
 use Swoole\Process;
 use Swoole\Runtime;
 use Swoole\Server;
@@ -21,6 +24,9 @@ use \co;
 
 class KafkaCServer
 {
+    private const  MASTER_UNIX_FILE = 'master.sock';
+    private const  CHILD_UNIX_FILE  = 'child_%s.sock';
+
     /**
      * @var KafkaCServer $instance
      */
@@ -62,9 +68,8 @@ class KafkaCServer
     private function __construct()
     {
         swoole_set_process_name($this->getMasterName());
-
-        $this->server = new Socket(AF_INET, SOCK_STREAM, 0);
-        $this->server->bind(env('SERVER_IP'), (int)env('SERVER_PORT'));
+        $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
+        $this->server->bind(self::getMatserSockFile());
         $this->server->listen(128);
         $this->masterPid = posix_getpid();
     }
@@ -86,15 +91,88 @@ class KafkaCServer
         $this->registerSignal();
         go(function () {
             while (true) {
-                echo "Accept: \n";
                 $client = $this->server->accept();
                 if ($client === false) {
-                    exit(1);
+                    \co::sleep(1);
                 } else {
-                    exit(2);
+                    $msg = $this->getAfUnixMessage($client);
+                    $msg = json_decode($msg, true);
+                    ['role' => $external, 'rpc' => $rpc, 'method' => $method] = $msg;
+                    if (
+                        in_array(RpcRoleEnum::getTextByCode($external), RpcRoleEnum::getAllText())
+                        &&
+                        $external === RpcRoleEnum::EXTERNAL
+                    ) {
+                        foreach ($this->kafkaProcesses as $index => $item) {
+                            $path = $this->getChildSockFile($index);
+                            if (!file_exists($path)) {
+                                $ret[$index] = [];
+                                continue;
+                            }
+                            $socket = new Socket(AF_UNIX, SOCK_STREAM, 0);
+                            $cmd = [
+                                'role'   => $external,
+                                'rpc'    => $rpc,
+                                'method' => $method,
+                            ];
+                            if (isset($msg['params'])) {
+                                $cmd['params'] = $msg['params'];
+                            }
+                            $data = json_encode($cmd);
+                            $package = pack('N', strlen($data)) . $data;
+                            if ($socket->connect($path)) {
+                                $socket->send($package);
+                                $msg = $this->getAfUnixMessage($socket);
+                                $ret[$index] = json_decode($msg, true);
+                                $socket->close();
+                            } else {
+                                $ret[$index] = [];
+                            }
+                        }
+                        $result = call_user_func([(new $rpc), Str::camel('on_' . $method)], $ret);
+                        $path = self::getMatserSockFile();
+                        $data = json_encode($result);
+                        $package = pack('N', strlen($data)) . $data;
+                        $client->send($package);
+                        $client->close();
+                    }
                 }
             }
         });
+    }
+
+    private function getAfUnixMessage($client): string
+    {
+        $len = $client->recv(4, 3);
+        $len = unpack('N', $len);
+        $len = is_array($len) ? current($len) : $len;
+        $msg = $client->recv($len, 3);
+
+        return $msg;
+    }
+
+    public static function getMatserSockFile(): string
+    {
+        $dir = env('SERVER_AF_UNIX_DIR');
+        if (!Str::endsWith($dir, '/')) {
+            $dir .= '/';
+        }
+
+        $path = $dir . sprintf(self::MASTER_UNIX_FILE);
+
+        return $path;
+    }
+
+    private function getChildSockFile($index): string
+    {
+        $dir = env('SERVER_AF_UNIX_DIR');
+        if (!Str::endsWith($dir, '/')) {
+            $dir .= '/';
+        }
+
+        $path = $dir . sprintf(self::CHILD_UNIX_FILE, $index);
+
+        return $path;
     }
 
     private function registerSignal()
@@ -173,12 +251,6 @@ class KafkaCServer
                 dispatch(new SinkerOtherEvent(), SinkerOtherEvent::NAME);
             });
 
-            // Receiving process messages
-            swoole_event_add($process->pipe, function () use ($process) {
-                $msg = $process->read();
-                var_dump($msg);
-            });
-
             go(function () use ($process) {
                 while (true) {
                     $this->checkMasterPid($process);
@@ -215,7 +287,7 @@ class KafkaCServer
             $index = $this->nextKafkaIndex;
             $this->nextKafkaIndex++;
         }
-        $process = new Process(function (Process $process) {
+        $process = new Process(function (Process $process) use ($index) {
             swoole_set_process_name($this->getProcessName());
             Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
@@ -231,10 +303,42 @@ class KafkaCServer
                 });
             });
 
-            // Receiving process messages
-            swoole_event_add($process->pipe, function () use ($process) {
-                $msg = $process->read();
-                var_dump($msg);
+            go(function () use ($index) {
+                while (true) {
+                    if (ClientKafka::getInstance()->isJoined()) {
+                        break;
+                    }
+                    \co::sleep(1);
+                }
+                $path = $this->getChildSockFile($index);
+                @unlink($path);
+                $socket = new Socket(AF_UNIX, SOCK_STREAM, 0);
+                $socket->bind($path);
+                $socket->listen();
+                while (true) {
+                    $client = $socket->accept();
+                    if ($client === false) {
+                        \co::sleep(1);
+                    } else {
+                        $msg = $this->getAfUnixMessage($client);
+                        $msg = json_decode($msg, true);
+                        ['rpc' => $rpc, 'method' => $method] = $msg;
+                        if (isset($msg['params'])) {
+                            $params = $msg['params'];
+                        }
+
+                        if (isset($params)) {
+                            $result = call_user_func([(new $rpc), $method]);
+                        } else {
+                            $result = call_user_func([(new $rpc), $method], $params);
+                        }
+
+                        $data = json_encode($result);
+                        $package = pack('N', strlen($data)) . $data;
+                        $client->send($package);
+                        $client->close();
+                    }
+                }
             });
 
             // Heartbeat

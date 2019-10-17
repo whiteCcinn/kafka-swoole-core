@@ -107,4 +107,20 @@ class RedisStorage
 
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
     }
+
+    /**
+     * @return string
+     */
+    public function getPendingKey(): string
+    {
+        return $this->pendingKey;
+    }
+
+    /**
+     * @return string
+     */
+    public function getProcessingKey(): string
+    {
+        return $this->processingKey;
+    }
 }

@@ -257,6 +257,7 @@ class CoreSubscriber implements EventSubscriberInterface
                     \co::sleep(1);
                     continue;
                 }
+
                 foreach (ClientKafka::getInstance()->getSelfLeaderTopicPartition() as $leaderId => $topicPartitions) {
                     $setTopics = [];
                     foreach ($topicPartitions as $topic => $partitions) {
@@ -527,6 +528,9 @@ class CoreSubscriber implements EventSubscriberInterface
                 $selfLeaderTopicPartition[$leaderId][$topicValue][] = $partitionValue;
             }
         }
+        if (!ClientKafka::getInstance()->isLeader()) {
+            var_dump($selfLeaderTopicPartition);
+        }
         ClientKafka::getInstance()->setSelfTopicPartition($selfTopicPartition);
         ClientKafka::getInstance()->setSelfLeaderTopicPartition($selfLeaderTopicPartition);
 
@@ -574,7 +578,7 @@ class CoreSubscriber implements EventSubscriberInterface
                     }
 
                     if (count($partitionResponse->getOffsets()) > 1) {
-                        [$offset, $highWatermark] = $partitionResponse->getOffsets();
+                        [$highWatermark, $offset] = $partitionResponse->getOffsets();
                         $offset = $offset->getValue();
                         $highWatermark = $highWatermark->getValue();
                     } else {
@@ -631,7 +635,6 @@ class CoreSubscriber implements EventSubscriberInterface
                             $partitionResponse->getPartition()->getValue(),
                             $partitionResponse->getOffset()->getValue()
                         );
-
                     }
                 }
                 if (count(array_unique($needChangeApiVersion)) === 1 && current($needChangeApiVersion) === true) {

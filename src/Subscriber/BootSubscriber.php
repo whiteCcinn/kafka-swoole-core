@@ -6,6 +6,7 @@ namespace Kafka\Subscriber;
 use App\App;
 use App\Subscriber\ApiSubscriber;
 use Kafka\Command\ProducerCommand;
+use Kafka\Command\RpcCommand;
 use Kafka\Command\StartCommand;
 use Kafka\Event\BootAfterEvent;
 use Kafka\Event\BootBeforeEvent;
@@ -57,8 +58,9 @@ class BootSubscriber implements EventSubscriberInterface
      */
     private function registerCommand(): void
     {
-        App::$application->add(new StartCommand());
         App::$application->add(new ProducerCommand());
+        App::$application->add(new StartCommand());
+        App::$application->add(new RpcCommand());
         App::$application->run();
     }
 

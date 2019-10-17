@@ -54,7 +54,7 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
     public function unpack(string $protocol, $client = null)
     {
         $decodeProtocol = $protocol;
-        $this->getCompleteProtocol($decodeProtocol);
+        $this->getCompleteProtocol($decodeProtocol, true);
         $this->unpackProtocol(null, null, $decodeProtocol, $client);
     }
 
@@ -108,13 +108,19 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
                         $arrayCount = unpack($wrapperProtocol, $buffer);
                         $arrayCount = is_array($arrayCount) ? array_shift($arrayCount) : $arrayCount;
 //                        echo "{$propertyName} count : " . $arrayCount . PHP_EOL;
-                        while ($arrayCount > 0 && strlen($protocol) > 0) {
-                            if (!Str::startsWith($className, $typeNamespace)) {
-                                $value[] = $classNameInstance = $classNameRef->newInstanceWithoutConstructor();
-                                $this->unpackProtocol($className, $classNameInstance, $protocol);
-                            } else {
-                                $valueInstance = $this->getValueInstance($protocol, $className);
-                                $value[] = $valueInstance;
+                        while ($arrayCount > 0) {
+                            if (!is_string($protocol)) {
+                                count($value) > 0 && array_pop($value);
+                                break;
+                            }
+                            if (strlen($protocol) > 0) {
+                                if (!Str::startsWith($className, $typeNamespace)) {
+                                    $value[] = $classNameInstance = $classNameRef->newInstanceWithoutConstructor();
+                                    $this->unpackProtocol($className, $classNameInstance, $protocol);
+                                } else {
+                                    $valueInstance = $this->getValueInstance($protocol, $className);
+                                    $value[] = $valueInstance;
+                                }
                             }
                             $arrayCount--;
                         }
@@ -123,22 +129,24 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
                     }
                     $this->setTypePropertyValue($instance, $propertyName, $value);
                 } else {
-                    if (!Str::startsWith($className, $typeNamespace)) {
-                        $classNameInstance = $classNameRef->newInstanceWithoutConstructor();
-                        $this->unpackProtocol($className, $classNameInstance, $protocol);
-                        $this->setTypePropertyValue($instance, $propertyName, $classNameInstance);
-                    } else {
-                        if ($className === ResponseHeader::class) {
+                    if (is_string($protocol)) {
+                        if (!Str::startsWith($className, $typeNamespace)) {
                             $classNameInstance = $classNameRef->newInstanceWithoutConstructor();
                             $this->unpackProtocol($className, $classNameInstance, $protocol);
                             $this->setTypePropertyValue($instance, $propertyName, $classNameInstance);
                         } else {
-                            $valueInstance = $this->getValueInstance($protocol, $className);
+                            if ($className === ResponseHeader::class) {
+                                $classNameInstance = $classNameRef->newInstanceWithoutConstructor();
+                                $this->unpackProtocol($className, $classNameInstance, $protocol);
+                                $this->setTypePropertyValue($instance, $propertyName, $classNameInstance);
+                            } else {
+                                $valueInstance = $this->getValueInstance($protocol, $className);
 //                            echo "[-] {$className}, name: {$propertyName}, value : " . $valueInstance->getValue() . PHP_EOL;
-                            if ($propertyName === 'size' && ($client instanceof Client || $client instanceof CoClient || $client instanceof Socket)) {
-                                $this->goOnReadBuffer($client, $valueInstance, $protocol);
+                                if ($propertyName === 'size' && ($client instanceof Client || $client instanceof CoClient || $client instanceof Socket)) {
+                                    $this->goOnReadBuffer($client, $valueInstance, $protocol);
+                                }
+                                $this->setTypePropertyValue($instance, $propertyName, $valueInstance);
                             }
-                            $this->setTypePropertyValue($instance, $propertyName, $valueInstance);
                         }
                     }
                 }
@@ -149,12 +157,17 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
 
     /**
      * @param string $protocol
+     * @param bool   $clear
      *
      * @return string
      */
-    public function getCompleteProtocol(string $protocol = ''): string
+    public function getCompleteProtocol(string $protocol = '', bool $clear = false): string
     {
         static $completeProtocol = '';
+
+        if ($clear) {
+            $completeProtocol = '';
+        }
 
         $completeProtocol .= $protocol;
 
