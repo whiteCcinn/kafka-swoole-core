@@ -13,30 +13,27 @@ use Kafka\ClientKafka;
 class MemberLeaderRpc extends BaseRpc
 {
     /**
-     * @return string
+     * @return array
      */
-    public function getMemberLeaderId(): string
+    public function getMemberLeaderId(): array
     {
+        $result['memberId'] = ClientKafka::getInstance()->getMemberId();
         if (ClientKafka::getInstance()->isLeader()) {
-            return ClientKafka::getInstance()->getMemberId();
+            $result['isLeader'] = true;
         } else {
-            return '';
+            $result['isLeader'] = false;
         }
+
+        return $result;
     }
 
     /**
      * @param array $multipleInfos
      *
-     * @return null|string
+     * @return array
      */
-    public function onGetMemberLeaderId(array $multipleInfos): ?string
+    public function onGetMemberLeaderId(array $multipleInfos): array
     {
-        foreach ($multipleInfos as $infos) {
-            if (!empty($infos)) {
-                return $infos;
-            }
-        }
-
-        return null;
+        return $multipleInfos;
     }
 }

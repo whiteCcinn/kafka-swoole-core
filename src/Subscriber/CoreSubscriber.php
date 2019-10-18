@@ -528,9 +528,7 @@ class CoreSubscriber implements EventSubscriberInterface
                 $selfLeaderTopicPartition[$leaderId][$topicValue][] = $partitionValue;
             }
         }
-        if (!ClientKafka::getInstance()->isLeader()) {
-            var_dump($selfLeaderTopicPartition);
-        }
+
         ClientKafka::getInstance()->setSelfTopicPartition($selfTopicPartition);
         ClientKafka::getInstance()->setSelfLeaderTopicPartition($selfLeaderTopicPartition);
 
