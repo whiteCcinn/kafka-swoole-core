@@ -27,6 +27,7 @@ use Kafka\Exception\RequestException\OffsetCommitRequestException;
 use Kafka\Exception\RequestException\OffsetFetchRequestException;
 use Kafka\Exception\RequestException\SyncGroupRequestException;
 use Kafka\Kafka;
+use Kafka\Log\KafkaLog;
 use Kafka\Protocol\Request\Fetch\PartitionsFetch;
 use Kafka\Protocol\Request\Fetch\TopicsFetch;
 use Kafka\Protocol\Request\FetchRequest;
@@ -93,9 +94,9 @@ class CoreSubscriber implements EventSubscriberInterface
     public function onHeartBeat(HeartbeatEvent $event): void
     {
         go(function () {
-            defer(function () {
-                throw new ClientException('Heartbeat request coroutine aborted unexpectedly');
-            });
+//            defer(function () {
+//                throw new ClientException('Heartbeat request coroutine aborted unexpectedly');
+//            });
             $heartbeatIntervalMs = App::$commonConfig->getHeartbeatIntervalMs();
             $sleepTime = $heartbeatIntervalMs / 1000;
             $socket = new Socket();
@@ -117,7 +118,8 @@ class CoreSubscriber implements EventSubscriberInterface
                     // rebalance need RejoinGroup
                     if ($response->getErrorCode()->getValue() === ProtocolErrorEnum::REBALANCE_IN_PROGRESS) {
                         if (!ClientKafka::getInstance()->isRebalancing()) {
-                            echo ProtocolErrorEnum::getTextByCode(ProtocolErrorEnum::REBALANCE_IN_PROGRESS) . PHP_EOL;
+                            KafkaLog::getInstance()
+                                    ->info(ProtocolErrorEnum::getTextByCode(ProtocolErrorEnum::REBALANCE_IN_PROGRESS));
                             $this->rebalance(App::$commonConfig, $socket);
                         }
                     } elseif ($response->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
@@ -125,14 +127,14 @@ class CoreSubscriber implements EventSubscriberInterface
                             ProtocolErrorEnum::getTextByCode($response->getErrorCode()->getValue())));
                     }
                 } catch (\Exception $e) {
-                    var_dump($e->getMessage());
+                    KafkaLog::getInstance()->warning($e->getMessage());
                     $socket->close();
                 } catch (\Error $error) {
-                    var_dump($error->getMessage());
+                    KafkaLog::getInstance()->error($error->getMessage());
                     $socket->close();
                 }
-                echo sprintf('%s:Heartbeat request every %s seconds...' . PHP_EOL,
-                    ClientKafka::getInstance()->getMemberId(), $sleepTime);
+                KafkaLog::getInstance()->info(sprintf('%s:Heartbeat request every %s seconds...',
+                    ClientKafka::getInstance()->getMemberId(), $sleepTime));
                 \co::sleep($sleepTime);
             }
         });
@@ -189,8 +191,8 @@ class CoreSubscriber implements EventSubscriberInterface
                             }
                         }
                     }
-                    echo sprintf('%s:Auto offsetCommit request every %s seconds...' . PHP_EOL,
-                        ClientKafka::getInstance()->getMemberId(), $autoCommitInterval);
+                    KafkaLog::getInstance()->info(sprintf('%s:Auto offsetCommit request every %s seconds...' . PHP_EOL,
+                        ClientKafka::getInstance()->getMemberId(), $autoCommitInterval));
                 }
             });
         }
@@ -507,7 +509,7 @@ class CoreSubscriber implements EventSubscriberInterface
         $response = $syncGroupRequest->response;
         // The group is rebalancing, so a rejoin is needed.
         if ($response->getErrorCode()->getValue() === ProtocolErrorEnum::REBALANCE_IN_PROGRESS) {
-            echo ProtocolErrorEnum::getTextByCode(ProtocolErrorEnum::REBALANCE_IN_PROGRESS) . PHP_EOL;
+            KafkaLog::getInstance()->info(ProtocolErrorEnum::getTextByCode(ProtocolErrorEnum::REBALANCE_IN_PROGRESS));
 //            $this->rebalance($commonConfig, $socket);
             goto Rebalance;
         } elseif ($response->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {

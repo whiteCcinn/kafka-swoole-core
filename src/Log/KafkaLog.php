@@ -4,7 +4,9 @@ declare(strict_types=1);
 
 namespace Kafka\Log;
 
+use Kafka\Enum\LogLevelEnum;
 use Kafka\Support\SingletonTrait;
+use Monolog\Formatter\LineFormatter;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 
@@ -21,21 +23,6 @@ class KafkaLog
      */
     private $logger;
 
-    /**
-     * @param string $msg
-     * @param array  $context
-     * @param array  $extra
-     * @param int    $level
-     */
-    public function write(string $msg, array $context = [], array $extra = [], int $level = Logger:: INFO)
-    {
-        if (!$this->init) {
-            $this->init();
-        }
-        
-        $this->logger->log($msg, $context, $extra, $level);
-    }
-
     private function init()
     {
         $this->initLogs();
@@ -45,11 +32,14 @@ class KafkaLog
         $formatter = new LineFormatter($output, $dateFormat);
 
         $this->logger = new Logger(env('APP_NAME'));
-
-        foreach ($this->logs as $log) {
-            $stream = new StreamHandler(env('KAFKA_LOG_DIR') . '/' . $log['path'], $log['level']);
-            $stream->setFormatter($formatter);
-            $this->logger->pushHandler($stream);
+        $level = env('KAFKA_LOG_LEVEL');
+        // If debug mode, output in the terminal
+        if($level !== LogLevelEnum::getTextByCode(LogLevelEnum::DEBUG)) {
+            foreach ($this->logs as $log) {
+                $stream = new StreamHandler(env('KAFKA_LOG_DIR') . '/' . $log['path'], $log['level']);
+                $stream->setFormatter($formatter);
+                $this->logger->pushHandler($stream);
+            }
         }
 
         $this->init = true;
@@ -59,7 +49,7 @@ class KafkaLog
     {
         $prefix = env('APP_NAME') . env('APP_ID', '');
 
-        return [
+        $this->logs = [
             [
                 'level' => Logger:: INFO,
                 'path'  => $prefix . '.info.log'
@@ -73,5 +63,201 @@ class KafkaLog
                 'path'  => $prefix . '.exception.log'
             ],
         ];
+    }
+
+    /**
+     * @param int    $level
+     * @param string $msg
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function log(int $level = Logger:: INFO, string $msg, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->log($level, $msg, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function debug(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->debug($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function info(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->info($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function notice(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->notice($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function warn(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->warn($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function warning(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->warn($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function err(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->err($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function error(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->error($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function crit(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->crit($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function critical(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->critical($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function alert(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->alert($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function emerg(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->emerg($message, $context);
+    }
+
+    /**
+     * @param string $message
+     * @param array  $context
+     *
+     * @return bool
+     */
+    public function emergency(string $message, array $context = [])
+    {
+        if (!$this->init) {
+            $this->init();
+        }
+
+        return $this->logger->emergency($message, $context);
     }
 }

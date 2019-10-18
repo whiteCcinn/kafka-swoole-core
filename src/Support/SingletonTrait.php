@@ -9,6 +9,7 @@ use Kafka\Api\ProducerApi;
 use Kafka\ClientKafka;
 use Kafka\Config\CommonConfig;
 use Kafka\Kafka;
+use Kafka\Log\KafkaLog;
 use Kafka\Manager\MetadataManager;
 
 trait SingletonTrait
@@ -17,7 +18,7 @@ trait SingletonTrait
 
     /**
      * Need to be compatible php 7.1.x, so this scene cannot be specified return type `object`
-     * @return MetadataManager | CommonConfig | Kafka | ClientKafka | ProducerApi | MetadataApi | OffsetCommitApi
+     * @return MetadataManager | CommonConfig | Kafka | ClientKafka | ProducerApi | MetadataApi | OffsetCommitApi | KafkaLog
      */
     public static function getInstance()
     {

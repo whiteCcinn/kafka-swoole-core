@@ -15,12 +15,16 @@ use Kafka\Event\CoreLogicEvent;
 use Kafka\Event\ProcessExitEvent;
 use Kafka\Event\SinkerEvent;
 use Kafka\Event\SinkerOtherEvent;
+use Kafka\Log\KafkaLog;
 use Kafka\RPC\BaseRpc;
 use Kafka\Support\Str;
 use Swoole\Process;
 use Swoole\Runtime;
 use Swoole\Server;
 use \co;
+use Symfony\Component\Console\Input\ArgvInput;
+use Symfony\Component\Console\Output\ConsoleOutput;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 class KafkaCServer
 {
@@ -190,6 +194,7 @@ class KafkaCServer
      */
     public function closeProcess(): bool
     {
+        $io = new SymfonyStyle(new ArgvInput(), new ConsoleOutput());
         $process = array_merge($this->sinkerProcesses, $this->kafkaProcesses);
         $ret = [];
         foreach ($process as $pid) {
@@ -197,10 +202,12 @@ class KafkaCServer
                 $ret[] = Process::kill($pid, SIGTERM);
             }
         }
-
+        
         if (count($ret) === count($process)) {
+            $io->success('[-] Server stoped');
             exit(0);
         } else {
+            $io->error('[-] Server stoped...');
             exit(1);
         }
 
@@ -254,8 +261,9 @@ class KafkaCServer
             go(function () use ($process) {
                 while (true) {
                     $this->checkMasterPid($process);
-                    echo sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
-                        getmypid(), 60);
+                    KafkaLog::getInstance()
+                            ->info(sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
+                                getmypid(), 60));
                     co::sleep(60);
                 }
             });
@@ -345,8 +353,9 @@ class KafkaCServer
             go(function () use ($process) {
                 while (true) {
                     $this->checkMasterPid($process);
-                    echo sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
-                        getmypid(), 60);
+                    KafkaLog::getInstance()
+                            ->info(sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
+                                getmypid(), 60));
                     co::sleep(60);
                 }
             });
@@ -413,7 +422,7 @@ class KafkaCServer
         if ($index !== false) {
             $index = intval($index);
             $new_pid = $this->createKafkaProcess($index);
-            echo "rebootKafkaProcess: {$index}={$new_pid} Done\n";
+            KafkaLog::getInstance()->emergency("rebootKafkaProcess: {$index}={$new_pid} Done");
 
             return;
         }
@@ -432,7 +441,7 @@ class KafkaCServer
         if ($index !== false) {
             $index = intval($index);
             $new_pid = $this->createSinkerProcess($index);
-            echo "rebootSinkerProcess: {$index}={$new_pid} Done\n";
+            KafkaLog::getInstance()->emergency("rebootSinkerProcess: {$index}={$new_pid} Done");
 
             return;
         }

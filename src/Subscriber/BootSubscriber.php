@@ -36,7 +36,7 @@ class BootSubscriber implements EventSubscriberInterface
     public function onBootBefore(): void
     {
         $dotenv = new Dotenv();
-        $dotenv->load(KAFKA_SWOOLE_ROOT . DIRECTORY_SEPARATOR . '.env');
+        $dotenv->overload(KAFKA_SWOOLE_ROOT . DIRECTORY_SEPARATOR . '.env');
 
         APP::$translator = \Kafka\I18N\I18N::getInstance();
 //        set_exception_handler([BaseException::class, BaseException::$exception_function_name]);

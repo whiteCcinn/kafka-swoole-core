@@ -9,6 +9,7 @@ use Kafka\Server\KafkaCServer;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 class StartCommand extends Command
 {
@@ -36,5 +37,7 @@ class StartCommand extends Command
                     ->setKafkaProcess($processNum)
                     ->setSinkerProcess((int)env('KAFKA_SINKER_PROCESS_NUM'))
                     ->start();
+        $io = new SymfonyStyle($input, $output);
+        $io->success('[-] Server starting... （For more information, please see the log or terminal output）');
     }
 }
