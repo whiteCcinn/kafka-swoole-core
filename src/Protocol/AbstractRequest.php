@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol;
 
+use App\App;
 use Kafka\Enum\ProtocolEnum;
 use Kafka\Enum\ProtocolVersionEnum;
 use Kafka\Exception\ProtocolTypeException;
@@ -300,7 +301,7 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
         $protocolPreName = Str::before($requestName, 'Request');
         $this->setRequestHeader(
             (new RequestHeader())->setApiVersion(Int16::value(ProtocolVersionEnum::API_VERSION_0))
-                                 ->setClientId(String16::value('kafka-swoole'))
+                                 ->setClientId(String16::value(App::$commonConfig->getGroupId()))
                                  ->setCorrelationId(Int32::value(ProtocolEnum::getCodeByText($protocolPreName)))
                                  ->setApiKey(Int16::value(ProtocolEnum::getCodeByText($protocolPreName)))
         );

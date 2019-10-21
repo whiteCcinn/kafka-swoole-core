@@ -185,7 +185,7 @@ class KafkaCServer
         Process::signal(SIGCHLD, [$this, 'processWait']);
 
         Process::signal(SIGINT, [$this, 'closeProcess']);
-
+        
         Process::signal(SIGTERM, [$this, 'closeProcess']);
     }
 
