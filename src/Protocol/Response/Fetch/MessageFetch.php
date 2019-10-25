@@ -3,9 +3,11 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
 use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int32;
+use Kafka\Protocol\Type\Int64;
 use Kafka\Protocol\Type\Int8;
 
 class MessageFetch
@@ -135,5 +137,34 @@ class MessageFetch
         $this->value = $value;
 
         return $this;
+    }
+
+    public function onValue(&$protocol)
+    {
+        if ($this->getAttributes()->getValue() & 0x02) {
+            $protocol = substr($protocol, 20);
+//            $ret = [];
+//            decode:
+//            if (!is_string($protocol) || strlen($protocol) <= 0) {
+//                $ret = implode('', $ret);
+//            } else {
+                $buffer = substr($protocol, 0, 4);
+                $protocol = substr($protocol, 4);
+                $len = unpack('N', $buffer);
+                $len = is_array($len) ? array_shift($len) : $len;
+                var_dump(bin2hex($protocol));
+                var_dump($len);
+
+                $data = substr($protocol, 0, $len);
+                var_dump(bin2hex($data));
+                $ret = snappy_uncompress($data);
+//                goto decode;
+//            }
+            $this->setValue(Bytes32::value($ret));
+
+            return true;
+        }
+
+        return false;
     }
 }

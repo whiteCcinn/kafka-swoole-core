@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use Kafka\Enum\ProtocolTypeEnum;
+use Kafka\Protocol\CommonResponse;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
+use Kafka\Protocol\Type\Int32;
 
 class PartitionResponsesFetch
 {
@@ -15,8 +18,11 @@ class PartitionResponsesFetch
     private $partitionHeader;
 
     /**
-     * null
-     *
+     * @var Int32 $messageSetSize
+     */
+    private $messageSetSize;
+
+    /**
      * @var MessageSetFetch[] $recordSet
      */
     private $recordSet;
@@ -57,6 +63,44 @@ class PartitionResponsesFetch
     public function setRecordSet(array $recordSet): PartitionResponsesFetch
     {
         $this->recordSet = $recordSet;
+
+        return $this;
+    }
+
+    public function onRecordSet(&$protocol)
+    {
+        $recordSet = [];
+        while (is_string($protocol) && strlen($protocol) > 0) {
+            $commonResponse = new CommonResponse();
+            $instance = new MessageSetFetch();
+            $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $protocol);
+            if ($instance->getMessage()->getAttributes() !== 0) {
+                $buffer = $instance->getMessage()->getValue()->getValue();
+                $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
+            }
+            $recordSet[] = $instance;
+        }
+        $this->setRecordSet($recordSet);
+
+        return true;
+    }
+
+    /**
+     * @return Int32
+     */
+    public function getMessageSetSize(): Int32
+    {
+        return $this->messageSetSize;
+    }
+
+    /**
+     * @param Int32 $messageSetSize
+     *
+     * @return PartitionResponsesFetch
+     */
+    public function setMessageSetSize(Int32 $messageSetSize): PartitionResponsesFetch
+    {
+        $this->messageSetSize = $messageSetSize;
 
         return $this;
     }

@@ -18,8 +18,6 @@ class ResponsesFetch
     private $topic;
 
     /**
-     * null
-     *
      * @var PartitionResponsesFetch[] $partition_responses
      */
     private $partition_responses;

@@ -301,7 +301,7 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
         $protocolPreName = Str::before($requestName, 'Request');
         $this->setRequestHeader(
             (new RequestHeader())->setApiVersion(Int16::value(ProtocolVersionEnum::API_VERSION_0))
-                                 ->setClientId(String16::value(App::$commonConfig->getGroupId()))
+                                 ->setClientId(String16::value('kafka-swoole'))
                                  ->setCorrelationId(Int32::value(ProtocolEnum::getCodeByText($protocolPreName)))
                                  ->setApiKey(Int16::value(ProtocolEnum::getCodeByText($protocolPreName)))
         );

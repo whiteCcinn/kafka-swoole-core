@@ -3,6 +3,9 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use Kafka\Enum\ProtocolTypeEnum;
+use Kafka\Protocol\CommonRequest;
+use Kafka\Protocol\CommonResponse;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
 use Kafka\Protocol\Type\Int32;
 use Kafka\Protocol\Type\Int64;
@@ -17,9 +20,9 @@ class MessageSetFetch
     private $offset;
 
     /**
-     * @var Int32 $messageSetSize
+     * @var Int32 $messageSize
      */
-    private $messageSetSize;
+    private $messageSize;
 
     /**
      * @var MessageFetch $message
@@ -49,19 +52,19 @@ class MessageSetFetch
     /**
      * @return Int32
      */
-    public function getMessageSetSize(): Int32
+    public function getMessageSize(): Int32
     {
-        return $this->messageSetSize;
+        return $this->messageSize;
     }
 
     /**
-     * @param Int32 $messageSetSize
+     * @param Int32 $messageSize
      *
      * @return MessageSetFetch
      */
-    public function setMessageSetSize(Int32 $messageSetSize): MessageSetFetch
+    public function setMessageSize(Int32 $messageSize): MessageSetFetch
     {
-        $this->messageSetSize = $messageSetSize;
+        $this->messageSize = $messageSize;
 
         return $this;
     }
@@ -84,5 +87,24 @@ class MessageSetFetch
         $this->message = $message;
 
         return $this;
+    }
+
+    /**
+     * @param $protocol
+     *
+     * @throws \Kafka\Exception\ProtocolTypeException
+     * @throws \ReflectionException
+     */
+    public function onMessage(&$protocol)
+    {
+        $buffer = substr($protocol, 0, $this->getMessageSize()->getValue());
+        $protocol = substr($protocol, $this->getMessageSize()->getValue());
+
+        $commonResponse = new CommonResponse();
+        $instance = new MessageFetch();
+        $commonResponse->unpackProtocol(MessageFetch::class, $instance, $buffer);
+        $this->setMessage($instance);
+
+        return true;
     }
 }
