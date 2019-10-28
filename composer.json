@@ -18,6 +18,7 @@
     "ext-json": "*",
     "ext-sockets": "*",
     "ext-posix": "*",
+    "ext-zlib": "*",
     "php": "^7.1",
     "symfony/console": "^4.3",
     "symfony/dotenv": "^4.3",

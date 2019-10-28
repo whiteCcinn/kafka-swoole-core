@@ -82,7 +82,7 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
         foreach ($refProperties as $refProperty) {
             $propertyComment = $refProperty->getDocComment();
             $propertyName = $refProperty->getName();
-            echo "开始解析 {$propertyName}, protocol size :" . strlen($protocol) . PHP_EOL;
+//            echo "开始解析 {$propertyName}, protocol size :" . strlen($protocol) . PHP_EOL;
             if (preg_match('/.*@var\s+(?P<protocolType>\w+)(?P<isArray>\[\])?\s+.*/', $propertyComment,
                 $matches)) {
                 $isArray = isset($matches['isArray']) ? true : false;
@@ -107,7 +107,7 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
                         $protocol = substr($protocol, $bytes);
                         $arrayCount = unpack($wrapperProtocol, $buffer);
                         $arrayCount = is_array($arrayCount) ? array_shift($arrayCount) : $arrayCount;
-                        echo "{$propertyName} count : " . $arrayCount . PHP_EOL;
+//                        echo "{$propertyName} count : " . $arrayCount . PHP_EOL;
                         while ($arrayCount > 0) {
                             if (!is_string($protocol)) {
                                 count($value) > 0 && array_pop($value);
@@ -124,8 +124,8 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
                             }
                             $arrayCount--;
                         }
-                        echo "[-] {$className}\twrapperProtocol : {$wrapperProtocol}, name: {$propertyName}, value : " . var_export($value,
-                                true) . PHP_EOL;
+//                        echo "[-] {$className}\twrapperProtocol : {$wrapperProtocol}, name: {$propertyName}, value : " . var_export($value,
+//                                true) . PHP_EOL;
                     }
                     $this->setTypePropertyValue($instance, $propertyName, $value);
                 } else {
@@ -141,7 +141,7 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
                                 $this->setTypePropertyValue($instance, $propertyName, $classNameInstance);
                             } else {
                                 $valueInstance = $this->getValueInstance($protocol, $className);
-                            echo "[-] {$className}, name: {$propertyName}, value : " . $valueInstance->getValue() . PHP_EOL;
+//                            echo "[-] {$className}, name: {$propertyName}, value : " . $valueInstance->getValue() . PHP_EOL;
                                 if ($propertyName === 'size' && ($client instanceof Client || $client instanceof CoClient || $client instanceof Socket)) {
                                     $this->goOnReadBuffer($client, $valueInstance, $protocol);
                                 }

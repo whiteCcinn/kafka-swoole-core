@@ -695,44 +695,6 @@ class CoreSubscriber implements EventSubscriberInterface
             }
         }
 
-        // offsetCommit
-        $offsetCommitRequest = new OffsetCommitRequest();
-        foreach (ClientKafka::getInstance()->getSelfLeaderTopicPartition() as $leaderId => $topicPartitions) {
-            $setTopics = [];
-            foreach ($topicPartitions as $topic => $partitions) {
-                $setPartitions = [];
-                foreach ($partitions as $partition) {
-                    $setPartitions[] = (new PartitionsOffsetCommit())->setPartitionIndex(Int32::value($partition))
-                                                                     ->setCommittedOffset(Int64::value(ClientKafka::getInstance()
-                                                                                                                  ->getTopicPartitionOffsetByTopicPartition(
-                                                                                                                      $topic,
-                                                                                                                      $partition
-                                                                                                                  )
-                                                                     ))
-                                                                     ->setCommittedMetadata(String16::value(''));
-                }
-                $setTopics[] = (new TopicsOffsetCommit())->setPartitions($setPartitions)
-                                                         ->setName(String16::value($topic));
-            }
-            $offsetCommitRequest->setTopics($setTopics)
-                                ->setGroupId(String16::value(App::$commonConfig->getGroupId()));
-            $socket = Kafka::getInstance()->getSocketByNodeId($leaderId);
-            $data = $offsetCommitRequest->pack();
-            $socket->send($data);
-            $socket->revcByKafka($offsetCommitRequest);
-
-            /** @var OffsetCommitResponse $response */
-            $response = $offsetCommitRequest->response;
-            foreach ($response->getTopics() as $topic) {
-                foreach ($topic->getPartitions() as $partition) {
-                    if ($partition->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-                        throw new OffsetCommitRequestException(sprintf('OffsetCommitRequest request error, the error message is: %s',
-                            ProtocolErrorEnum::getTextByCode($partition->getErrorCode()->getValue())));
-                    }
-                }
-            }
-        }
-
         ClientKafka::getInstance()->setIsRebalancing(false)->setIsJoined(true);
     }
 }

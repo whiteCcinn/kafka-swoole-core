@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Protocol\CommonResponse;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
@@ -74,7 +75,8 @@ class PartitionResponsesFetch
             $commonResponse = new CommonResponse();
             $instance = new MessageSetFetch();
             $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $protocol);
-            if ($instance->getMessage()->getAttributes() !== 0) {
+            // Internal decompression
+            if ($instance->getMessage()->getAttributes() !== CompressionCodecEnum::NORMAL) {
                 $buffer = $instance->getMessage()->getValue()->getValue();
                 $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
             }

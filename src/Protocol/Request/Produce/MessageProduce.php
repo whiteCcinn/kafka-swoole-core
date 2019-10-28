@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Request\Produce;
 
+use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int32;
 use Kafka\Protocol\Type\Int8;
@@ -140,9 +141,15 @@ class MessageProduce
 
     private function autoRecode()
     {
-        $this->setMagicByte(Int8::value(0));
-        $this->setAttributes(Int8::value(0));
-        $this->setKey(Bytes32::value(''));
+        if (empty($this->getMagicByte())) {
+            $this->setMagicByte(Int8::value(0));
+        }
+        if (empty($this->getAttributes())) {
+            $this->setAttributes(Int8::value(0));
+        }
+        if (empty($this->getKey())) {
+            $this->setKey(Bytes32::value(''));
+        }
 
         $protocol = new CommonRequest();
         $fn = function ($instance, $className, $wrapperProtocol, $propertyName) {
@@ -156,5 +163,32 @@ class MessageProduce
         $data = $protocol->packProtocol(static::class, $this);
 
         $this->setCrc(Int32::value((string)crc32($data)));
+
+        if (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::SNAPPY) {
+            $oldAttributes = $this->getAttributes();
+            $this->setAttributes(Int8::value(0));
+
+            $protocol = new CommonRequest();
+            $data = $protocol->packProtocol(static::class, $this);
+            $this->setCompressValue(Bytes32::value(snappy_compress($data)));
+
+            $this->setAttributes($oldAttributes);
+        } elseif (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::GZIP) {
+            $oldAttributes = $this->getAttributes();
+            $this->setAttributes(Int8::value(0));
+
+            $protocol = new CommonRequest();
+            $data = $protocol->packProtocol(static::class, $this);
+            $this->setCompressValue(Bytes32::value(gzencode($data)));
+
+            $this->setAttributes($oldAttributes);
+        }
+    }
+
+    private function setCompressValue(Bytes32 $value): MessageProduce
+    {
+        $this->value = $value;
+
+        return $this;
     }
 }

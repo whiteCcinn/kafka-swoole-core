@@ -3,11 +3,11 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
 use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int32;
-use Kafka\Protocol\Type\Int64;
 use Kafka\Protocol\Type\Int8;
 
 class MessageFetch
@@ -139,32 +139,56 @@ class MessageFetch
         return $this;
     }
 
+    /**
+     * @param $protocol
+     *
+     * @return bool
+     */
     public function onValue(&$protocol)
     {
-        if ($this->getAttributes()->getValue() & 0x02) {
+        if (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::SNAPPY) {
+            /* snappy-java adds its own header (SnappyCodec)
+               which is not compatible with the official Snappy
+               implementation.
+               8: magic, 4: version, 4: compatible
+               followed by any number of chunks:
+                 4: length
+                 ...: snappy-compressed data.
+             */
             $protocol = substr($protocol, 20);
-//            $ret = [];
-//            decode:
-//            if (!is_string($protocol) || strlen($protocol) <= 0) {
-//                $ret = implode('', $ret);
-//            } else {
-                $buffer = substr($protocol, 0, 4);
-                $protocol = substr($protocol, 4);
-                $len = unpack('N', $buffer);
+            $ret = [];
+            SnappyDecompression:
+            if (!is_string($protocol) || (is_string($protocol) && strlen($protocol) <= 0)) {
+                $ret = implode('', $ret);
+            } else {
+                $buffer = substr($protocol, 0, ProtocolTypeEnum::B32);
+                $protocol = substr($protocol, ProtocolTypeEnum::B32);
+                $len = unpack(ProtocolTypeEnum::getTextByCode(ProtocolTypeEnum::B32), $buffer);
                 $len = is_array($len) ? array_shift($len) : $len;
-                var_dump(bin2hex($protocol));
-                var_dump($len);
 
                 $data = substr($protocol, 0, $len);
-                var_dump(bin2hex($data));
-                $ret = snappy_uncompress($data);
-//                goto decode;
-//            }
+                $protocol = substr($protocol, $len);
+                $ret[] = snappy_uncompress($data);
+                goto SnappyDecompression;
+            }
             $this->setValue(Bytes32::value($ret));
+
+            return true;
+        } else if (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::GZIP) {
+            $buffer = substr($protocol, 0, ProtocolTypeEnum::B32);
+            $protocol = substr($protocol, ProtocolTypeEnum::B32);
+            $len = unpack(ProtocolTypeEnum::getTextByCode(ProtocolTypeEnum::B32), $buffer);
+            $len = is_array($len) ? array_shift($len) : $len;
+
+            $data = substr($protocol, 0, $len);
+            $protocol = substr($protocol, $len);
+
+            $this->setValue(Bytes32::value(gzdecode($data)));
 
             return true;
         }
 
+        // Normal
         return false;
     }
 }

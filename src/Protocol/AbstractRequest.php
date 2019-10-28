@@ -106,11 +106,12 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
                 $className = $this->correctionClassName($shortClassName, $classNamespace, $typeNamespace,
                     $protocolType);
 
+                if (method_exists($instance, $onMethod = Str::camel('on_' . $propertyName))) {
+                    $instance->{$onMethod}($protocol);
+                    continue;
+                }
+
                 if ($isArray) {
-                    if (method_exists($instance, $onMethod = Str::camel('on_' . $propertyName))) {
-                        $instance->{$onMethod}($protocol);
-                        continue;
-                    }
                     $protocolObjectArray = $this->getPropertyValue($instance, $propertyName);
                     $arrayCount = count($protocolObjectArray);
                     $protocol .= pack(Arrays32::getWrapperProtocol(), (string)$arrayCount);
@@ -134,11 +135,6 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
                         }
                     }
                 } else {
-                    if (method_exists($instance, $onMethod = Str::camel('on_' . $propertyName))) {
-                        $instance->{$onMethod}($protocol);
-                        continue;
-                    }
-
                     if ($className === RequestHeader::class) {
                         $protocol = $this->packProtocol($className, $this->getPropertyValue($instance, $propertyName),
                             $protocol);
