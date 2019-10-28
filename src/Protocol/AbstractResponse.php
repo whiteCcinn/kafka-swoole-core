@@ -190,8 +190,6 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
             goto receive;
         }
         $this->getCompleteProtocol($protocol);
-//        var_dump(bin2hex($protocol));
-//        var_dump($this->getCompleteProtocol());
     }
 
 
