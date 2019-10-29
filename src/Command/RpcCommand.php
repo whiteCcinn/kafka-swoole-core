@@ -72,6 +72,16 @@ class RpcCommand extends Command
             'rpc'    => MetadataRpc::class,
             'method' => 'getTopics',
             'output' => MetadataTopicsOutput::class
+        ],
+        'retran'  => [
+            'rpc'    => MetadataRpc::class,
+            'method' => 'getTopics',
+            'output' => MetadataTopicsOutput::class
+        ],
+        'clear_log'  => [
+            'rpc'    => MetadataRpc::class,
+            'method' => 'getTopics',
+            'output' => MetadataTopicsOutput::class
         ]
     ];
 
