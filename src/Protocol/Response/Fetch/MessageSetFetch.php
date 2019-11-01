@@ -97,13 +97,27 @@ class MessageSetFetch
      */
     public function onMessage(&$protocol)
     {
-        $buffer = substr($protocol, 0, $this->getMessageSize()->getValue());
-        $protocol = substr($protocol, $this->getMessageSize()->getValue());
+        if (is_string($protocol)) {
+            // Insufficient reading sub-section, the message is put on the next read
+            if ($this->getMessageSize()->getValue() > strlen($protocol)) {
+                $instance = new MessageFetch();
+                $instance->setCrc(Int32::value(null));
+                $this->setMessage($instance);
+                $protocol = '';
+            } else {
+                $buffer = substr($protocol, 0, $this->getMessageSize()->getValue());
+                $protocol = substr($protocol, $this->getMessageSize()->getValue());
 
-        $commonResponse = new CommonResponse();
-        $instance = new MessageFetch();
-        $commonResponse->unpackProtocol(MessageFetch::class, $instance, $buffer);
-        $this->setMessage($instance);
+                $commonResponse = new CommonResponse();
+                $instance = new MessageFetch();
+                $commonResponse->unpackProtocol(MessageFetch::class, $instance, $buffer);
+                $this->setMessage($instance);
+            }
+        } else {
+            $instance = new MessageFetch();
+            $instance->setCrc(Int32::value(null));
+            $this->setMessage($instance);
+        }
 
         return true;
     }

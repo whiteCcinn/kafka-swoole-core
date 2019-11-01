@@ -59,7 +59,7 @@ class RedisStorage
                 'time'    => time(),
                 'message' => $item
             ];
-            $redis->lPush($this->pendingKey, json_encode($info));
+            $redis->lPush($this->pendingKey, json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         }
 
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
@@ -103,7 +103,7 @@ class RedisStorage
         /** @var Redis $redis */
         ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
 
-        var_dump($redis->lRem($this->processingKey, json_encode($info), 1));
+        $redis->lRem($this->processingKey, json_encode($info,JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 1);
 
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
     }

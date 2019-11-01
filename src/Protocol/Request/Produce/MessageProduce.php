@@ -126,6 +126,7 @@ class MessageProduce
 
     /**
      * @param Bytes32 $value
+     * @param bool    $autoRecord
      *
      * @return MessageProduce
      */
@@ -141,13 +142,13 @@ class MessageProduce
 
     private function autoRecode()
     {
-        if (empty($this->getMagicByte())) {
+        if (empty($this->magicByte)) {
             $this->setMagicByte(Int8::value(0));
         }
-        if (empty($this->getAttributes())) {
-            $this->setAttributes(Int8::value(0));
+        if (empty($this->attributes)) {
+            $this->setAttributes(Int8::value(CompressionCodecEnum::NORMAL));
         }
-        if (empty($this->getKey())) {
+        if (empty($this->key)) {
             $this->setKey(Bytes32::value(''));
         }
 
@@ -163,26 +164,6 @@ class MessageProduce
         $data = $protocol->packProtocol(static::class, $this);
 
         $this->setCrc(Int32::value((string)crc32($data)));
-
-        if (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::SNAPPY) {
-            $oldAttributes = $this->getAttributes();
-            $this->setAttributes(Int8::value(0));
-
-            $protocol = new CommonRequest();
-            $data = $protocol->packProtocol(static::class, $this);
-            $this->setCompressValue(Bytes32::value(snappy_compress($data)));
-
-            $this->setAttributes($oldAttributes);
-        } elseif (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::GZIP) {
-            $oldAttributes = $this->getAttributes();
-            $this->setAttributes(Int8::value(0));
-
-            $protocol = new CommonRequest();
-            $data = $protocol->packProtocol(static::class, $this);
-            $this->setCompressValue(Bytes32::value(gzencode($data)));
-
-            $this->setAttributes($oldAttributes);
-        }
     }
 
     private function setCompressValue(Bytes32 $value): MessageProduce

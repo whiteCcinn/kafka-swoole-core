@@ -3,6 +3,8 @@ declare(strict_types=1);
 
 namespace Kafka\Command;
 
+use Kafka\Api\ListOffsetsApi;
+use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Event\StartBeforeEvent;
 use Kafka\Kafka;
@@ -17,6 +19,7 @@ use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int16;
 use Kafka\Protocol\Type\Int32;
 use Kafka\Protocol\Type\Int64;
+use Kafka\Protocol\Type\Int8;
 use Kafka\Protocol\Type\String16;
 use Kafka\Server\KafkaCServer;
 use Kafka\Socket\Socket;
@@ -50,7 +53,12 @@ class ProducerCommand extends Command
                 'k',
                 InputOption::VALUE_OPTIONAL,
                 'Which is the topic you want to send to partition by key?'
-            )->addArgument(
+            )->addOption(
+                'compress',
+                'c',
+                InputOption::VALUE_OPTIONAL,
+                'Which one do you want to compress: 0: normal 1:gzip 2:snappy 3:lz4')
+            ->addArgument(
                 'message',
                 InputArgument::REQUIRED,
                 'The message you wish to send.'
@@ -71,11 +79,11 @@ class ProducerCommand extends Command
         $topic = $input->getOption('topic');
         $partition = $input->getOption('partition');
         $key = $input->getOption('key');
+        $compress = (int)$input->getOption('compress');
         $message = $input->getArgument('message');
 
         Send:
         MetadataManager::getInstance()->registerConfig()->registerMetadataInfo([$topic]);
-        $partitions = Kafka::getInstance()->getPartitions();
         $topicPartitionLeaders = Kafka::getInstance()->getTopicsPartitionLeader();
         $topicPartition = isset($partitions[$topic]) ? $partitions[$topic] : [0];
         $topicPartitionLeader = isset($topicPartitionLeaders[$topic]) ? $topicPartitionLeaders[$topic] : current($topicPartitionLeaders);
@@ -90,6 +98,18 @@ class ProducerCommand extends Command
             $assignPartition = (int)$partition;
         }
 
+        // Compress
+        if ($compress === CompressionCodecEnum::NORMAL) {
+            $attributes = Int8::value(CompressionCodecEnum::NORMAL);
+        } elseif ($compress === CompressionCodecEnum::SNAPPY) {
+            $attributes = Int8::value(CompressionCodecEnum::SNAPPY);
+        } elseif ($compress === CompressionCodecEnum::GZIP) {
+            $attributes = Int8::value(CompressionCodecEnum::GZIP);
+        } else {
+            throw new \RuntimeException('Todo Lz4 Compress');
+        }
+//        $listOffsets = ListOffsetsApi::getInstance()->getListOffsets($topic, [$assignPartition]);
+//        ['highWatermark' => $highWatermark] = current($listOffsets);
         $protocol = new ProduceRequest();
         $protocol->setAcks(Int16::value(1))
                  ->setTimeout(Int32::value(1 * 1000))
@@ -98,9 +118,10 @@ class ProducerCommand extends Command
                                              ->setData([
                                                  (new DataProduce())->setPartition(Int32::value($assignPartition))
                                                                     ->setMessageSet([
-                                                                        (new MessageSetProduce())->setOffset(Int64::value(0))
+                                                                        (new MessageSetProduce())->setOffset(Int64::value(-1))
                                                                                                  ->setMessage(
-                                                                                                     (new MessageProduce())->setValue(Bytes32::value($message))
+                                                                                                     (new MessageProduce())->setAttributes($attributes)
+                                                                                                                           ->setValue(Bytes32::value($message))
                                                                                                  ),
                                                                     ])
                                              ])

@@ -75,8 +75,13 @@ class PartitionResponsesFetch
             $commonResponse = new CommonResponse();
             $instance = new MessageSetFetch();
             $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $protocol);
+
+            // Insufficient reading sub-section, the message is put on the next read
+            if ($instance->getMessage()->getCrc()->getValue() === null) {
+                continue;
+            }
             // Internal decompression
-            if ($instance->getMessage()->getAttributes() !== CompressionCodecEnum::NORMAL) {
+            if ($instance->getMessage()->getAttributes()->getValue() !== CompressionCodecEnum::NORMAL) {
                 $buffer = $instance->getMessage()->getValue()->getValue();
                 $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
             }

@@ -125,10 +125,18 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
 
                             // todo debug
 //                            echo "[-] {$className}\twrapperProtocol : {$wrapperProtocol}, name: {$propertyName}, value : " . $protocolObject->getValue() . PHP_EOL;
+//                            echo bin2hex($protocol) . PHP_EOL;
 
                             $value = $protocolObject->getValue();
                             if (in_array($className, [String16::class, Bytes32::class])) {
-                                $protocol .= pack($wrapperProtocol, (string)strlen($value)) . $value;
+                                if (!empty($value)) {
+                                    $length = strlen($value);
+                                } elseif ($value === null) {
+                                    $length = -1;
+                                } else {
+                                    $length = 0;
+                                }
+                                $protocol .= pack($wrapperProtocol, (string)$length) . $value;
                             } else {
                                 $this->IntTypePack($protocol, $wrapperProtocol, $value);
                             }
@@ -156,7 +164,14 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
 //                                    true) . PHP_EOL;
 
                             if (in_array($className, [String16::class, Bytes32::class])) {
-                                $protocol .= pack($wrapperProtocol, (string)strlen($value)) . $value;
+                                if (!empty($value)) {
+                                    $length = strlen($value);
+                                } elseif ($value === null) {
+                                    $length = -1;
+                                } else {
+                                    $length = 0;
+                                }
+                                $protocol .= pack($wrapperProtocol, (string)$length) . $value;
                             } else {
                                 if ($instance instanceof AbstractRequest && $propertyName == 'size') {
                                     $protocol = pack($wrapperProtocol, (string)strlen($protocol)) . $protocol;

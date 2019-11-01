@@ -2,6 +2,8 @@
 
 namespace Kafka\Api;
 
+use http\Exception\RuntimeException;
+use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Kafka;
 use Kafka\Protocol\Request\Produce\DataProduce;
@@ -14,6 +16,7 @@ use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int16;
 use Kafka\Protocol\Type\Int32;
 use Kafka\Protocol\Type\Int64;
+use Kafka\Protocol\Type\Int8;
 use Kafka\Protocol\Type\String16;
 
 class ProducerApi extends AbstractApi
@@ -80,7 +83,8 @@ class ProducerApi extends AbstractApi
      *
      * @return bool
      */
-    public function produce(string $conn, string $topic, ?int $partition, ?string $key, string $message): bool
+    public function produce(string $conn, string $topic, ?int $partition, ?string $key, string $message,
+                            $compress = CompressionCodecEnum::NORMAL): bool
     {
         if (!isset($this->connBrokerListMap[$conn])) {
             return false;
@@ -106,6 +110,17 @@ class ProducerApi extends AbstractApi
             $assignPartition = (int)$partition;
         }
 
+        // Compress
+        if ($compress === CompressionCodecEnum::NORMAL) {
+            $attributes = Int8::value(CompressionCodecEnum::NORMAL);
+        } elseif ($compress === CompressionCodecEnum::SNAPPY) {
+            $attributes = Int8::value(CompressionCodecEnum::SNAPPY);
+        } elseif ($compress === CompressionCodecEnum::GZIP) {
+            $attributes = Int8::value(CompressionCodecEnum::GZIP);
+        } else {
+            throw new \RuntimeException('Todo Lz4 Compress');
+        }
+
         $protocol = new ProduceRequest();
         $protocol->setAcks(Int16::value(1))
                  ->setTimeout(Int32::value(1 * 1000))
@@ -117,6 +132,7 @@ class ProducerApi extends AbstractApi
                                                                         (new MessageSetProduce())->setOffset(Int64::value(0))
                                                                                                  ->setMessage(
                                                                                                      (new MessageProduce())->setValue(Bytes32::value($message))
+                                                                                                                           ->setAttributes($attributes)
                                                                                                  ),
                                                                     ])
                                              ])

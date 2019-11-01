@@ -47,6 +47,11 @@ class KafkaCServer
     private $masterPid;
 
     /**
+     * @var $rpcCid
+     */
+    private $rpcCid;
+
+    /**
      * @var int $nextKafkaIndex
      */
     private $nextKafkaIndex = 0;
@@ -72,10 +77,18 @@ class KafkaCServer
     private function __construct()
     {
         swoole_set_process_name($this->getMasterName());
-        $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
-        $this->server->bind(self::getMatserSockFile());
-        $this->server->listen(128);
-        $this->masterPid = posix_getpid();
+        $this->createMasterUnixFile();
+    }
+
+
+    private function createMasterUnixFile()
+    {
+        if (!file_exists(self::getMatserSockFile())) {
+            $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
+            $this->server->bind(self::getMatserSockFile());
+            $this->server->listen(128);
+            $this->masterPid = posix_getpid();
+        }
     }
 
     /**
@@ -93,6 +106,11 @@ class KafkaCServer
     public function start(): void
     {
         $this->registerSignal();
+        $this->createMasterUnixFileAccpet();
+    }
+
+    private function createMasterUnixFileAccpet()
+    {
         go(function () {
             while (true) {
                 $client = $this->server->accept();
@@ -185,7 +203,7 @@ class KafkaCServer
         Process::signal(SIGCHLD, [$this, 'processWait']);
 
         Process::signal(SIGINT, [$this, 'closeProcess']);
-        
+
         Process::signal(SIGTERM, [$this, 'closeProcess']);
     }
 
@@ -202,7 +220,7 @@ class KafkaCServer
                 $ret[] = Process::kill($pid, SIGTERM);
             }
         }
-        
+
         if (count($ret) === count($process)) {
             $io->success('[-] Server stoped');
             exit(0);
@@ -466,6 +484,9 @@ class KafkaCServer
             } else {
                 $this->rebootSinkerProcess($ret);
             }
+            // Warning: when the child process restarts, the unixfile of the master process will be removed
+            $this->createMasterUnixFile();
+            $this->createMasterUnixFileAccpet();
         }
     }
 

@@ -100,7 +100,7 @@ abstract class AbstractResponse extends AbstractRequestOrResponse
 
                 if ($isArray) {
                     $value = [];
-                    if (strlen($protocol) > 0) {
+                    if (is_string($protocol) && strlen($protocol) > 0) {
                         $wrapperProtocol = ProtocolTypeEnum::getTextByCode(ProtocolTypeEnum::B32);
                         $bytes = ProtocolTypeEnum::B32;
                         $buffer = substr($protocol, 0, $bytes);

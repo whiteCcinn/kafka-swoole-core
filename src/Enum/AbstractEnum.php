@@ -50,7 +50,7 @@ abstract class AbstractEnum
     {
         $comment = self::$comment[static::class];
         if (!isset($comment[$code])) {
-            throw new \RuntimeException("The enumeration's code does not exist：{$code}");
+            throw new \RuntimeException(static::class . ": The enumeration's code does not exist：{$code}");
         }
 
         $result = $comment[$code];
@@ -78,7 +78,7 @@ abstract class AbstractEnum
         $revComment = array_flip($comment);
 
         if (!isset($revComment[$message])) {
-            throw new \RuntimeException("The enumeration's message does not exist：{$message}");
+            throw new \RuntimeException(static::class . ": The enumeration's message does not exist：{$message}");
         }
 
         return $revComment[$message];
