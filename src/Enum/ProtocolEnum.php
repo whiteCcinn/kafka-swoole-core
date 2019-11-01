@@ -62,4 +62,9 @@ class ProtocolEnum extends AbstractEnum
      * @message("SyncGroup")
      */
     public const SYNC_GROUP = 14;
+
+    /**
+     * @message("DescribeGroups")
+     */
+    public const DESCRIBE_GROUPs = 15;
 }
