@@ -55,6 +55,10 @@ class RedisStorage
         /** @var Redis $redis */
         ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
         foreach ($data as $item) {
+            // The queue maximum was exceeded
+            if ($redis->lLen($this->pendingKey) >= (int)env('KAFKA_STORAGE_REDIS_LIMIT', 40000)) {
+                break;
+            }
             $info = [
                 'time'    => time(),
                 'message' => $item
@@ -103,7 +107,7 @@ class RedisStorage
         /** @var Redis $redis */
         ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
 
-        $redis->lRem($this->processingKey, json_encode($info,JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 1);
+        $redis->lRem($this->processingKey, json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 1);
 
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
     }
