@@ -13,6 +13,9 @@ use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
 use Kafka\Event\ProcessExitEvent;
+use Kafka\Event\SetKafkaProcessNameEvent;
+use Kafka\Event\SetMasterProcessNameEvent;
+use Kafka\Event\SetSinkerProcessNameEvent;
 use Kafka\Event\SinkerEvent;
 use Kafka\Event\SinkerOtherEvent;
 use Kafka\Log\KafkaLog;
@@ -47,11 +50,6 @@ class KafkaCServer
     private $masterPid;
 
     /**
-     * @var $rpcCid
-     */
-    private $rpcCid;
-
-    /**
      * @var int $nextKafkaIndex
      */
     private $nextKafkaIndex = 0;
@@ -77,6 +75,7 @@ class KafkaCServer
     private function __construct()
     {
         swoole_set_process_name($this->getMasterName());
+        dispatch(new SetMasterProcessNameEvent(), SetMasterProcessNameEvent::NAME);
         $this->createMasterUnixFile();
     }
 
@@ -268,8 +267,9 @@ class KafkaCServer
             $index = $this->nextSinkerIndex;
             $this->nextSinkerIndex++;
         }
-        $process = new Process(function (Process $process) {
+        $process = new Process(function (Process $process) use($index) {
             swoole_set_process_name($this->getProcessName('sinker'));
+            dispatch(new SetSinkerProcessNameEvent($index), SetSinkerProcessNameEvent::NAME);
             Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
             go(function () {
@@ -315,6 +315,7 @@ class KafkaCServer
         }
         $process = new Process(function (Process $process) use ($index) {
             swoole_set_process_name($this->getProcessName());
+            dispatch(new SetKafkaProcessNameEvent($index), SetKafkaProcessNameEvent::NAME);
             Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
 
             Process::signal(SIGINT, function () use ($process) {

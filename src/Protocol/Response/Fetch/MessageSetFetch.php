@@ -97,7 +97,7 @@ class MessageSetFetch
      */
     public function onMessage(&$protocol)
     {
-        if (is_string($protocol)) {
+        if (is_string($protocol) && !empty($protocol)) {
             // Insufficient reading sub-section, the message is put on the next read
             if ($this->getMessageSize()->getValue() > strlen($protocol)) {
                 $instance = new MessageFetch();

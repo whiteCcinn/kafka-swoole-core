@@ -134,7 +134,7 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
                                 } elseif ($value === null) {
                                     $length = -1;
                                 } else {
-                                    $length = 0;
+                                    $length = $className === String16::class ? 0 : -1;
                                 }
                                 $protocol .= pack($wrapperProtocol, (string)$length) . $value;
                             } else {
@@ -169,7 +169,7 @@ abstract class AbstractRequest extends AbstractRequestOrResponse
                                 } elseif ($value === null) {
                                     $length = -1;
                                 } else {
-                                    $length = 0;
+                                    $length = $className === String16::class ? 0 : -1;
                                 }
                                 $protocol .= pack($wrapperProtocol, (string)$length) . $value;
                             } else {

@@ -100,7 +100,7 @@ class SinkerSubscriber implements EventSubscriberInterface
         $storage = RedisStorage::getInstance();
         $adapter->setAdaptee($storage);
         while (true) {
-            $messages = $storage->pop();
+            $messages = $adapter->pop();
             $acks = SinkerController::getInstance()->handler($messages);
             foreach ($messages as $k => $info) {
                 if ($acks[$k]) {

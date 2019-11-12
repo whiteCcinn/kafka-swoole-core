@@ -68,6 +68,13 @@ class PartitionResponsesFetch
         return $this;
     }
 
+    /**
+     * @param $protocol
+     *
+     * @return bool
+     * @throws \Kafka\Exception\ProtocolTypeException
+     * @throws \ReflectionException
+     */
     public function onRecordSet(&$protocol)
     {
         $recordSet = [];
@@ -84,6 +91,7 @@ class PartitionResponsesFetch
             if ($instance->getMessage()->getAttributes()->getValue() !== CompressionCodecEnum::NORMAL) {
                 $buffer = $instance->getMessage()->getValue()->getValue();
                 $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
+                $protocol .= $buffer;
             }
             $recordSet[] = $instance;
         }

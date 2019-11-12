@@ -292,8 +292,8 @@ class CoreSubscriber implements EventSubscriberInterface
                     /** @var FetchResponse $response */
                     $response = $fetchRequest->response;
                     $messages = [];
-                    foreach ($response->getResponses() as $response) {
-                        foreach ($response->getPartitionResponses() as $partitionResponse) {
+                    foreach ($response->getResponses() as $responses) {
+                        foreach ($responses->getPartitionResponses() as $partitionResponse) {
                             if ($partitionResponse->getPartitionHeader()
                                                   ->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                                 throw new FetchRequestException(sprintf('FetchRequest request error, the error message is: %s',
@@ -303,7 +303,7 @@ class CoreSubscriber implements EventSubscriberInterface
 
                             foreach ($partitionResponse->getRecordSet() as $recordSet) {
                                 $messages[] = [
-                                    'topic'     => $response->getTopic()->getValue(),
+                                    'topic'     => $responses->getTopic()->getValue(),
                                     'partition' => $partitionResponse->getPartitionHeader()->getPartition()->getValue(),
                                     'offset'    => $recordSet->getOffset()->getValue(),
                                     'message'   => $recordSet->getMessage()->getValue()->getValue()
@@ -618,7 +618,6 @@ class CoreSubscriber implements EventSubscriberInterface
 
         /** @var OffsetFetchResponse $response */
         $response = $offsetFetchRequest->response;
-//        var_dump($response->toArray());
         try {
             $needChangeApiVersion = true;
             foreach ($response->getResponses() as $response) {
@@ -627,7 +626,7 @@ class CoreSubscriber implements EventSubscriberInterface
 
                     $offset = $partitionResponse->getOffset()->getValue();
 
-                    if ($offset >=0 ) {
+                    if ($offset >= 0) {
                         $needChangeApiVersion = false;
                         if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                             throw new OffsetFetchRequestException(sprintf('Api Version 0, OffsetFetchRequest request error, the error message is: %s',
@@ -655,7 +654,6 @@ class CoreSubscriber implements EventSubscriberInterface
             $socket->revcByKafka($offsetFetchRequest);
             /** @var OffsetFetchResponse $response */
             $response = $offsetFetchRequest->response;
-//            var_dump($response->toArray());
             foreach ($response->getResponses() as $response) {
                 foreach ($response->getPartitionResponses() as $partitionResponse) {
                     if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
@@ -685,8 +683,6 @@ class CoreSubscriber implements EventSubscriberInterface
                             $offset = $highWatermark - 1;
                         }
                     }
-//                    echo $response->getTopic()->getValue() . ':' . $partitionResponse->getPartition()
-//                                                                                     ->getValue() . ':' . $offset . PHP_EOL;
                     ClientKafka::getInstance()->setTopicPartitionOffset(
                         $response->getTopic()->getValue(),
                         $partitionResponse->getPartition()->getValue(),

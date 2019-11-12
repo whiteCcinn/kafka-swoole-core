@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Kafka\Command;
 
 use Kafka\Api\ListOffsetsApi;
+use Kafka\Command\Output\ProducerOutput;
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Event\StartBeforeEvent;
@@ -28,6 +29,7 @@ use Symfony\Component\Console\Input\InputArgument;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 class ProducerCommand extends Command
 {
@@ -58,6 +60,12 @@ class ProducerCommand extends Command
                 'c',
                 InputOption::VALUE_OPTIONAL,
                 'Which one do you want to compress: 0: normal 1:gzip 2:snappy 3:lz4')
+            ->addOption(
+                'repeat',
+                'r',
+                InputOption::VALUE_OPTIONAL,
+                'Number of message repeats',
+                1)
             ->addArgument(
                 'message',
                 InputArgument::REQUIRED,
@@ -80,6 +88,7 @@ class ProducerCommand extends Command
         $partition = $input->getOption('partition');
         $key = $input->getOption('key');
         $compress = (int)$input->getOption('compress');
+        $repeat = (int)$input->getOption('repeat');
         $message = $input->getArgument('message');
 
         Send:
@@ -110,6 +119,18 @@ class ProducerCommand extends Command
         }
 //        $listOffsets = ListOffsetsApi::getInstance()->getListOffsets($topic, [$assignPartition]);
 //        ['highWatermark' => $highWatermark] = current($listOffsets);
+
+        $messageSets = [];
+
+        while ($repeat > 0) {
+            $messageSets[] = (new MessageSetProduce())->setOffset(Int64::value(-1))
+                                                      ->setMessage(
+                                                          (new MessageProduce())->setAttributes($attributes)
+                                                                                ->setValue(Bytes32::value($message))
+                                                      );
+            $repeat--;
+        }
+
         $protocol = new ProduceRequest();
         $protocol->setAcks(Int16::value(1))
                  ->setTimeout(Int32::value(1 * 1000))
@@ -117,13 +138,7 @@ class ProducerCommand extends Command
                      (new TopicDataProduce())->setTopic(String16::value($topic))
                                              ->setData([
                                                  (new DataProduce())->setPartition(Int32::value($assignPartition))
-                                                                    ->setMessageSet([
-                                                                        (new MessageSetProduce())->setOffset(Int64::value(-1))
-                                                                                                 ->setMessage(
-                                                                                                     (new MessageProduce())->setAttributes($attributes)
-                                                                                                                           ->setValue(Bytes32::value($message))
-                                                                                                 ),
-                                                                    ])
+                                                                    ->setMessageSet($messageSets)
                                              ])
                  ]);
         $data = $protocol->pack();
@@ -143,6 +158,7 @@ class ProducerCommand extends Command
                 goto Send;
             }
         }
-        var_dump($protocol->response->toArray());
+        $result = $responses->toArray();
+        (new ProducerOutput())->output(new SymfonyStyle($input, $output), $result);
     }
 }
