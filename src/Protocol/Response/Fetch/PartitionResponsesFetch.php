@@ -81,7 +81,6 @@ class PartitionResponsesFetch
         while (is_string($protocol) && strlen($protocol) > 0) {
             $commonResponse = new CommonResponse();
             $instance = new MessageSetFetch();
-            var_dump(strlen($protocol));
             $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $protocol);
 
             // Insufficient reading sub-section, the message is put on the next read
