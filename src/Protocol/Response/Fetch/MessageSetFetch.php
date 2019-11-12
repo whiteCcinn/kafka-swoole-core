@@ -7,6 +7,7 @@ use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Protocol\CommonRequest;
 use Kafka\Protocol\CommonResponse;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
+use Kafka\Protocol\Type\Bytes32;
 use Kafka\Protocol\Type\Int32;
 use Kafka\Protocol\Type\Int64;
 
@@ -101,21 +102,32 @@ class MessageSetFetch
             // Insufficient reading sub-section, the message is put on the next read
             if ($this->getMessageSize()->getValue() > strlen($protocol)) {
                 $instance = new MessageFetch();
-                $instance->setCrc(Int32::value(null));
+                $instance->setCrc(Int32::value(null))->setValue(Bytes32::value(null));
                 $this->setMessage($instance);
                 $protocol = '';
             } else {
+                $instance = new MessageFetch();
+                // incomplete_message，all subsequent protocols are removed
+                if ($this->getMessageSize()->getValue() < 14) {
+                    $protocol = '';
+                }
+
                 $buffer = substr($protocol, 0, $this->getMessageSize()->getValue());
                 $protocol = substr($protocol, $this->getMessageSize()->getValue());
 
                 $commonResponse = new CommonResponse();
-                $instance = new MessageFetch();
                 $commonResponse->unpackProtocol(MessageFetch::class, $instance, $buffer);
+
+                // incomplete_message，all subsequent protocols are removed
+                if ($instance->getValue()->getValue() === null) {
+                    $protocol = '';
+                }
+
                 $this->setMessage($instance);
             }
         } else {
             $instance = new MessageFetch();
-            $instance->setCrc(Int32::value(null));
+            $instance->setCrc(Int32::value(null))->setValue(Bytes32::value(null));
             $this->setMessage($instance);
         }
 

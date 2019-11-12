@@ -146,6 +146,12 @@ class MessageFetch
      */
     public function onValue(&$protocol)
     {
+        if (!is_string($protocol)) {
+            $this->setValue(Bytes32::value(null));
+
+            return false;
+        }
+
         if (($this->getAttributes()->getValue() & 0x07) === CompressionCodecEnum::SNAPPY) {
             /* snappy-java adds its own header (SnappyCodec)
                which is not compatible with the official Snappy
@@ -168,9 +174,16 @@ class MessageFetch
 
                 $data = substr($protocol, 0, $len);
                 $protocol = substr($protocol, $len);
-                $ret[] = snappy_uncompress($data);
+                // A warning level is raised
+                $data = @snappy_uncompress($data);
+                if ($data === false) {
+                    $ret = null;
+                    goto setValue;
+                }
+                $ret[] = $data;
                 goto SnappyDecompression;
             }
+            setValue:
             $this->setValue(Bytes32::value($ret));
 
             return true;
