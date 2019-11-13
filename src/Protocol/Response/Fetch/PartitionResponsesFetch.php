@@ -5,6 +5,7 @@ namespace Kafka\Protocol\Response\Fetch;
 
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolTypeEnum;
+use Kafka\Log\KafkaLog;
 use Kafka\Protocol\CommonResponse;
 use Kafka\Protocol\TraitStructure\ToArrayTrait;
 use Kafka\Protocol\Type\Int32;
@@ -77,6 +78,7 @@ class PartitionResponsesFetch
      */
     public function onRecordSet(&$protocol)
     {
+        $startTime = time();
         $recordSet = [];
         while (is_string($protocol) && strlen($protocol) > 0) {
             $commonResponse = new CommonResponse();
@@ -108,6 +110,11 @@ class PartitionResponsesFetch
                 }
             }
             $recordSet[] = $instance;
+            if ((time() - $startTime) > 10) {
+                KafkaLog::getInstance()
+                        ->warning(sprintf('Parsed data is too slow, and producers compress too much data, partition: %s, current: %d ',
+                            $this->getPartitionHeader()->getPartition()->getValue(), count($recordSet)));
+            }
         }
         $this->setRecordSet($recordSet);
 

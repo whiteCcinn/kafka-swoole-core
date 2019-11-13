@@ -275,7 +275,7 @@ class CoreSubscriber implements EventSubscriberInterface
                                                                                          $partition
                                                                                      ) + 1
                                                                       ))
-                                                                      ->setPartitionMaxBytes(Int32::value(65536));
+                                                                      ->setPartitionMaxBytes(Int32::value(App::$commonConfig->getFetchMaxBytes()));
                             $setPartitions[] = $partitionsFetch;
                         }
                         $setTopics[] = $topicsFetch->setPartitions($setPartitions);

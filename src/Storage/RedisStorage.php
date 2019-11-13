@@ -88,8 +88,9 @@ class RedisStorage
             $data = $redis->rpoplpush($this->pendingKey, $this->processingKey);
             if (!empty($data)) {
                 $messages[] = json_decode($data, true);
+            } else {
+                \co::sleep(1);
             }
-//            \co::sleep(1);
         }
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
 

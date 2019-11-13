@@ -62,6 +62,11 @@ class CommonConfig extends AbstractConfig
     protected $autoOffsetReset;
 
     /**
+     * @var int $fetchMaxBytes
+     */
+    protected $fetchMaxBytes;
+
+    /**
      * @var
      */
     protected $kafkaVersion;
@@ -104,6 +109,7 @@ class CommonConfig extends AbstractConfig
         $this->validatePartitionAssignmentStrategy($config->getPartitionAssignmentStrategy());
         $this->validateAutoCommitIntervalMs($config->getAutoCommitIntervalMs());
         $this->validateAutoOffsetReset($config->getAutoOffsetReset());
+        $this->validateFetchMaxbytes($config->getFetchMaxBytes());
     }
 
     /**
@@ -162,6 +168,19 @@ class CommonConfig extends AbstractConfig
     {
         if ($autoCommitIntervalMs <= 0) {
             throw new InvalidConfigException('auto.commit.interval.ms must be greater than 0');
+        }
+    }
+
+    /**
+     * @param int $autoCommitIntervalMs
+     *
+     * @throws InvalidConfigException
+     */
+    private function validateFetchMaxbytes(int $fetchMaxBytes)
+    {
+        $default = 65535;
+        if ($fetchMaxBytes < $default) {
+            throw new InvalidConfigException("fetch.max.bytes must be greater than {$default}");
         }
     }
 
@@ -255,5 +274,13 @@ class CommonConfig extends AbstractConfig
     public function getKafkaVersion()
     {
         return $this->kafkaVersion;
+    }
+
+    /**
+     * @return int
+     */
+    public function getFetchMaxBytes(): int
+    {
+        return $this->fetchMaxBytes;
     }
 }
