@@ -116,6 +116,14 @@ class PartitionResponsesFetch
                             $this->getPartitionHeader()->getPartition()->getValue(), count($recordSet)));
             }
         }
+        // sort by offset
+        usort($recordSet, function (MessageSetFetch $item1, MessageSetFetch $item2) {
+            if ($item1->getOffset()->getValue() === $item2->getOffset()->getValue()) {
+                return 0;
+            }
+
+            return ($item1->getOffset()->getValue()) > ($item2->getOffset()->getValue()) ? 1 : -1;
+        });
         $this->setRecordSet($recordSet);
 
         return true;
