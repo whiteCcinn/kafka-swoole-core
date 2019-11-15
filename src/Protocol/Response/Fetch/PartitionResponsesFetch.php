@@ -87,10 +87,8 @@ class PartitionResponsesFetch
 
             $buffer = $instance->getMessage()->getValue()->getValue();
             if ($buffer === null) {
-                array_pop($recordSet);
                 continue;
             }
-
             // Insufficient reading sub-section, the message is put on the next read
             if ($instance->getMessage()->getCrc()->getValue() === null) {
                 continue;
@@ -101,21 +99,28 @@ class PartitionResponsesFetch
                 if ($buffer === null) {
                     continue;
                 }
+                InternalDecompression:
+                $instance = new MessageSetFetch();
                 $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
-                $protocol .= $buffer;
-
                 // Insufficient reading sub-section, the message is put on the next read
                 if ($instance->getMessage()->getCrc()->getValue() === null) {
                     continue;
                 }
+                $recordSet[] = $instance;
+                if (!empty($buffer)) {
+                    goto InternalDecompression;
+                }
+            } else {
+                $recordSet[] = $instance;
             }
-            $recordSet[] = $instance;
+
             if ((time() - $startTime) > 10) {
                 KafkaLog::getInstance()
                         ->warning(sprintf('Parsed data is too slow, and producers compress too much data, partition: %s, current: %d ',
                             $this->getPartitionHeader()->getPartition()->getValue(), count($recordSet)));
             }
         }
+
         // sort by offset
         usort($recordSet, function (MessageSetFetch $item1, MessageSetFetch $item2) {
             if ($item1->getOffset()->getValue() === $item2->getOffset()->getValue()) {
@@ -124,6 +129,7 @@ class PartitionResponsesFetch
 
             return ($item1->getOffset()->getValue()) > ($item2->getOffset()->getValue()) ? 1 : -1;
         });
+
         $this->setRecordSet($recordSet);
 
         return true;

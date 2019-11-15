@@ -75,4 +75,14 @@ class StorageAdapter implements StorageInterface
     {
         $this->adaptee->ack($message);
     }
+
+    /**
+     * @param callable|null $fn
+     *
+     * @return mixed
+     */
+    public function retran(callable $fn = null)
+    {
+        return $this->adaptee->retran($fn);
+    }
 }

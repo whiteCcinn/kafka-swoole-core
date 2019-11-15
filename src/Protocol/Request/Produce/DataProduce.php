@@ -83,8 +83,6 @@ class DataProduce
 
         foreach ($this->getMessageSet() as $messageSet) {
             $attributes[] = $messageSet->getMessage()->getAttributes()->getValue();
-            $messageSet->getMessage()->setAttributes(Int8::value(CompressionCodecEnum::NORMAL));
-            $data .= $commentRequest->packProtocol(MessageSetProduce::class, $messageSet);
         }
 
         if (count(array_unique($attributes)) !== 1) {
@@ -93,6 +91,10 @@ class DataProduce
 
         $attributes = current($attributes);
         if ((($attributes & 0x07) !== CompressionCodecEnum::NORMAL)) {
+            foreach ($this->getMessageSet() as $messageSet) {
+                $messageSet->getMessage()->setAttributes(Int8::value(CompressionCodecEnum::NORMAL));
+                $data .= $commentRequest->packProtocol(MessageSetProduce::class, $messageSet);
+            }
             if (($attributes & 0x07) === CompressionCodecEnum::SNAPPY) {
                 $compressValue = snappy_compress($data);
             } elseif (($attributes & 0x07) === CompressionCodecEnum::GZIP) {
@@ -100,15 +102,19 @@ class DataProduce
             } else {
                 throw new \RuntimeException('not support lz4');
             }
-        }
 
-        $messageSet = new MessageSetProduce();
-        $messageSet->setOffset(Int64::value(-1))->setMessage(
-            (new MessageProduce())->setAttributes(Int8::value($attributes))
-                                  ->setKey(Bytes32::value(''))
-                                  ->setValue(Bytes32::value($compressValue))
-        );
-        $data = $commentRequest->packProtocol(MessageSetProduce::class, $messageSet);
+            $messageSet = new MessageSetProduce();
+            $messageSet->setOffset(Int64::value(-1))->setMessage(
+                (new MessageProduce())->setAttributes(Int8::value($attributes))
+                                      ->setKey(Bytes32::value(''))
+                                      ->setValue(Bytes32::value($compressValue))
+            );
+            $data = $commentRequest->packProtocol(MessageSetProduce::class, $messageSet);
+        } else {
+            foreach ($this->getMessageSet() as $messageSet) {
+                $data .= $commentRequest->packProtocol(MessageSetProduce::class, $messageSet);
+            }
+        }
 
         $protocol .= pack(Int32::getWrapperProtocol(), strlen($data)) . $data;
     }

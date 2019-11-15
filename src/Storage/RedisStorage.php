@@ -114,6 +114,48 @@ class RedisStorage
     }
 
     /**
+     * @return bool
+     * @throws \Exception
+     */
+    public function retran(callable $fn = null): bool
+    {
+        $this->init();
+        /** @var Redis $redis */
+        ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
+        $number = $redis->lLen($this->processingKey);
+        if ($fn !== null && is_callable($fn)) {
+            $datas = $redis->lRange($this->processingKey, 0, -1);
+            $lastPendingCount = $redis->lLen($this->pendingKey);
+            $lastprocessingCount = $redis->lLen($this->processingKey);
+            foreach ($datas as $item) {
+                $ret = $fn($item);
+                if ($ret) {
+                    $pushRet = $redis->lPush($this->pendingKey, $item);
+                    $remRet = $redis->lRem($this->processingKey, $item, 1);
+                }
+            }
+
+            RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+            if ($pushRet > $lastCount && $remRet < $lastprocessingCount) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            while ($number > 0) {
+                $data = $redis->rpoplpush($this->processingKey, $this->pendingKey);
+                if (!empty($data)) {
+                    $number--;
+                }
+            }
+        }
+
+        RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+
+        return true;
+    }
+
+    /**
      * @return string
      */
     public function getPendingKey(): string

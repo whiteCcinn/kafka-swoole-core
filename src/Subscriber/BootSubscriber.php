@@ -7,6 +7,7 @@ use App\App;
 use App\Subscriber\ApiSubscriber;
 use Kafka\Command\DescribeGroupsCommand;
 use Kafka\Command\ProducerCommand;
+use Kafka\Command\RetranCommand;
 use Kafka\Command\RpcCommand;
 use Kafka\Command\StartCommand;
 use Kafka\Event\BootAfterEvent;
@@ -63,6 +64,7 @@ class BootSubscriber implements EventSubscriberInterface
         App::$application->add(new StartCommand());
         App::$application->add(new RpcCommand());
         App::$application->add(new DescribeGroupsCommand());
+        App::$application->add(new RetranCommand());
         App::$application->run();
     }
 
