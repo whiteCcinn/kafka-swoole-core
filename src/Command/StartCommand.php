@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Command;
 
+use Kafka\Enum\MessageStorageEnum;
 use Kafka\Event\StartBeforeEvent;
 use Kafka\Manager\MetadataManager;
 use Kafka\Server\KafkaCServer;
@@ -33,10 +34,16 @@ class StartCommand extends Command
     {
         dispatch(new StartBeforeEvent(), StartBeforeEvent::NAME);
         $processNum = MetadataManager::getInstance()->calculationClientNum();
-        KafkaCServer::getInstance()
-                    ->setKafkaProcess($processNum)
-                    ->setSinkerProcess((int)env('KAFKA_SINKER_PROCESS_NUM'))
-                    ->start();
+        if(env('KAFKA_MESSAGE_STORAGE')===MessageStorageEnum::getTextByCode(MessageStorageEnum::DIRECTLY)){
+            KafkaCServer::getInstance()
+                        ->setKafkaProcess($processNum)
+                        ->start();
+        }else {
+            KafkaCServer::getInstance()
+                        ->setKafkaProcess($processNum)
+                        ->setSinkerProcess((int)env('KAFKA_SINKER_PROCESS_NUM'))
+                        ->start();
+        }
         $io = new SymfonyStyle($input, $output);
         $io->success('[-] Server starting... （For more information, please see the log or terminal output）');
     }

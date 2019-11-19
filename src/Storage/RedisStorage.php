@@ -38,27 +38,31 @@ class RedisStorage
             if (preg_match('/[\s\S]*(?P<index>\d+)$/', env('KAFKA_STORAGE_REDIS'), $matches)) {
                 $this->configIndex = (int)$matches['index'];
             }
-            $this->pendingKey = env('KAFKA_STORAGE_REDIS_PENDING_KEY');
-            $this->processingKey = env('KAFKA_STORAGE_REDIS_PROCESSING_KEY');
+            $this->pendingKey = env('APP_MODE') . ':' . env('KAFKA_STORAGE_REDIS_PENDING_KEY');
+            $this->processingKey = env('APP_MODE') . ':' . env('KAFKA_STORAGE_REDIS_PROCESSING_KEY');
         }
     }
 
     /**
      * @param array $data
      *
-     * @return RedisStorage
+     * @return array
      * @throws \Exception
      */
-    public function push(array $data = []): self
+    public function push(array $data = []): array
     {
         $this->init();
         /** @var Redis $redis */
-        ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
+        ['handler' => $redis] = RedisPool::getInstance($this->configIndex, true)->get($this->configIndex, true);
+        $result = [];
+        $redis->lLen($this->pendingKey);
+        CheckListLen:
+        if ($redis->recv() >= (int)env('KAFKA_STORAGE_REDIS_LIMIT', 40000)) {
+            sleep(1);
+            goto CheckListLen;
+        }
         foreach ($data as $item) {
             // The queue maximum was exceeded
-            if ($redis->lLen($this->pendingKey) >= (int)env('KAFKA_STORAGE_REDIS_LIMIT', 40000)) {
-                break;
-            }
             $info = [
                 'time'    => time(),
                 'message' => $item
@@ -66,9 +70,13 @@ class RedisStorage
             $redis->lPush($this->pendingKey, json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE));
         }
 
-        RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+        for ($i = 0; $i < count($data); $i++) {
+            $result[] = $redis->recv();
+        }
 
-        return $this;
+        RedisPool::getInstance($this->configIndex, true)->put($redis, $this->configIndex, true);
+
+        return $result;
     }
 
     /**
@@ -81,36 +89,69 @@ class RedisStorage
     {
         $this->init();
         /** @var Redis $redis */
-        ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
+        ['handler' => $redis] = RedisPool::getInstance($this->configIndex, true)->get($this->configIndex, true);
         $messages = [];
+        $originNum = $number;
 
-        while (count($messages) < $number) {
-            $data = $redis->rpoplpush($this->pendingKey, $this->processingKey);
+        $startTime = time();
+        $needReturn = false;
+        Rpoplpush:
+        $i = 0;
+        while ($i < $number) {
+            if ((time() - $startTime > 60) && !empty($messages)) {
+                $needReturn = true;
+                goto Recv;
+            }
+            $redis->rpoplpush($this->pendingKey, $this->processingKey);
+            $i++;
+        }
+
+        Recv:
+        while ($i > 0) {
+            $data = $redis->recv();
             if (!empty($data)) {
                 $messages[] = json_decode($data, true);
-            } else {
+            }
+            $i--;
+        }
+        if (($lastCount = $originNum - count($messages)) > 0 && $needReturn === false) {
+            $number = $lastCount;
+            if (count($messages) === 0) {
                 \co::sleep(1);
             }
+            goto Rpoplpush;
         }
-        RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+
+        RedisPool::getInstance($this->configIndex, true)->put($redis, $this->configIndex, true);
 
         return $messages;
     }
 
     /**
-     * @param array $info
+     * @param array $messages
      *
      * @throws \Exception
      */
-    public function ack(array $info)
+    public function ack(array $messages)
     {
         $this->init();
         /** @var Redis $redis */
-        ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
+        ['handler' => $redis] = RedisPool::getInstance($this->configIndex, true)->get($this->configIndex, true);
 
-        $redis->lRem($this->processingKey, json_encode($info, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE), 1);
+        $i = 0;
+        foreach ($messages as $message) {
+            $redis->lRem($this->processingKey, json_encode($message, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE),
+                1);
+            $i++;
+        }
 
-        RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+        $result = [];
+        while ($i > 0) {
+            $result[] = $redis->recv();
+            $i--;
+        }
+
+        RedisPool::getInstance($this->configIndex, true)->put($redis, $this->configIndex, true);
     }
 
     /**

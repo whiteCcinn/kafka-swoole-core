@@ -47,9 +47,9 @@ class StorageAdapter implements StorageInterface
      */
     public function push(array $data = [])
     {
-        $this->adaptee->push($data);
+        $result = $this->adaptee->push($data);
 
-        return $this;
+        return $result;
     }
 
     /**
@@ -67,13 +67,13 @@ class StorageAdapter implements StorageInterface
     }
 
     /**
-     * @param string $message
+     * @param array $messages
      *
      * @throws \Exception
      */
-    public function ack(string $message)
+    public function ack(array $messages)
     {
-        $this->adaptee->ack($message);
+        $this->adaptee->ack($messages);
     }
 
     /**

@@ -43,12 +43,13 @@ class RedisPool
     }
 
     /**
-     * @param int $index
+     * @param int  $index
+     * @param bool $pipe
      *
      * @return RedisPool
      * @throws \Exception
      */
-    public static function getInstance(int $index = 0): self
+    public static function getInstance(int $index = 0, bool $pipe = false): self
     {
         if (self::$number === null) {
             self::$number = env('POOL_REDIS_NUM');
@@ -58,12 +59,12 @@ class RedisPool
             throw new \Exception('invalid index');
         }
 
-        if (!isset(self::$instance[$index])) {
-            static::$instance[$index] = new static();
-            static::$instance[$index]->init($index);
+        if (!isset(self::$instance[$index . ':' . (int)$pipe])) {
+            static::$instance[$index . ':' . (int)$pipe] = new static();
+            static::$instance[$index . ':' . (int)$pipe]->init($index, $pipe);
         }
 
-        return static::$instance[$index];
+        return static::$instance[$index . ':' . (int)$pipe];
     }
 
 
@@ -72,17 +73,17 @@ class RedisPool
      *
      * @return RedisPool
      */
-    protected function init(int $index = 0): self
+    protected function init(int $index = 0, bool $pipe = false): self
     {
         if (!isset($this->once[$index])) {
-            $this->once[$index] = false;
+            $this->once[$index . ':' . (int)$pipe] = false;
         }
-        if (!$this->once[$index]) {
+        if (!$this->once[$index . ':' . (int)$pipe]) {
             $size = (int)env("POOL_REDIS_{$index}_MAX_NUMBER");
             $maxIdle = (int)env("POOL_REDIS_{$index}_MAX_IDLE");
-            $this->pool[$index] = new Channel($size);
+            $this->pool[$index . ':' . (int)$pipe] = new Channel($size);
             for ($i = 0; $i < $maxIdle; $i++) {
-                $this->createConnect($index);
+                $this->createConnect($index, $pipe);
             }
         }
 
@@ -92,7 +93,7 @@ class RedisPool
     /**
      * @param int $index
      */
-    function createConnect(int $index)
+    function createConnect(int $index, bool $pipe = false)
     {
         $host = env("POOL_REDIS_{$index}_HOST");
         $port = (int)env("POOL_REDIS_{$index}_PORT");
@@ -102,14 +103,17 @@ class RedisPool
         $res = $redis->connect($host, $port);
         if ($res == false) {
             throw new RuntimeException("failed to connect redis server.");
-        } else {#
+        } else {
             if ($auth !== null) {
                 $redis->auth($auth);
             }
             if ($db !== null) {
                 $redis->select($db);
             }
-            $this->put($redis, $index);
+            if ($pipe) {
+                $redis->setDefer();
+            }
+            $this->put($redis, $index, $pipe);
         }
     }
 
@@ -119,12 +123,12 @@ class RedisPool
      *
      * @return RedisPool
      */
-    function put($redis, int $index = 0): self
+    function put($redis, int $index = 0, bool $pipe = false): self
     {
-        if (!isset($this->once[$index])) {
+        if (!isset($this->once[$index . ':' . (int)$pipe])) {
             throw new RuntimeException("The pool invalid");
         }
-        $this->pool[$index]->push($redis);
+        $this->pool[$index . ':' . (int)$pipe]->push($redis);
 
         return $this;
     }
@@ -134,9 +138,9 @@ class RedisPool
      *
      * @return array
      */
-    function get(int $index = 0): array
+    function get(int $index = 0, bool $pipe = false): array
     {
-        if (!isset($this->once[$index])) {
+        if (!isset($this->once[$index . ':' . (int)$pipe])) {
             throw new RuntimeException("The pool invalid");
         }
 
@@ -144,14 +148,22 @@ class RedisPool
          * @var Redis $redis
          */
         pop:
-        $redis = $this->pool[$index]->pop();
+        $redis = $this->pool[$index . ':' . (int)$pipe]->pop();
         try {
-            if ($redis->ping() !== 0) {
-                $this->createConnect($index);
-                goto pop;
+            if ($pipe) {
+                $redis->ping();
+                if ($redis->recv() !== 0) {
+                    $this->createConnect($index, $pipe);
+                    goto pop;
+                }
+            } else {
+                if ($redis->ping() !== 0) {
+                    $this->createConnect($index, $pipe);
+                    goto pop;
+                }
             }
         } catch (\Exception $e) {
-            $this->createConnect($index);
+            $this->createConnect($index, $pipe);
             goto pop;
         }
 

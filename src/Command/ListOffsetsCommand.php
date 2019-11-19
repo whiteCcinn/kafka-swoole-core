@@ -6,7 +6,10 @@ namespace Kafka\Command;
 use App\App;
 use Kafka\Api\DescribeGroupsApi;
 use Kafka\Api\ListOffsetsApi;
+use Kafka\Api\OffsetCommitApi;
+use Kafka\Api\OffsetFetchApi;
 use Kafka\Command\Output\DescribeGruopsOutput;
+use Kafka\Command\Output\ListOffsetsOutput;
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Event\StartBeforeEvent;
@@ -37,25 +40,25 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-class DescribeGroupsCommand extends Command
+class ListOffsetsCommand extends Command
 {
-    protected static $defaultName = 'kafka.describe_groups';
+    protected static $defaultName = 'kafka.list_offsets';
 
     protected function configure()
     {
         $this
-            ->setDescription('See consumer group details')
-            ->setHelp('See consumer group details...')
+            ->setDescription('Browse the offset of a topic in kafka')
+            ->setHelp('Browse the offset of a topic in kafka...')
             ->addOption(
                 'topic',
                 't',
                 InputOption::VALUE_REQUIRED,
                 'Which topic is subscribed by the consumer group?'
-            )->addOption(
-                'group',
-                'g',
-                InputOption::VALUE_REQUIRED,
-                'Which consumer group?'
+            )->addArgument(
+                'timestamp',
+                InputArgument::OPTIONAL,
+                'timestamp, 0=>all, -1=>max, -2=>min, 1573758000=>time',
+                0
             );
     }
 
@@ -68,30 +71,25 @@ class DescribeGroupsCommand extends Command
      */
     protected function execute(InputInterface $input, OutputInterface $output)
     {
-        $group = $input->getOption('group');
         $topic = $input->getOption('topic');
+        $timestamp = (int)$input->getArgument('timestamp');
+        if ($timestamp === 0) {
+            $inTimestamp = -1;
+        } else {
+            $inTimestamp = $timestamp;
+        }
 
         MetadataManager::getInstance()->registerConfig()->registerMetadataInfo([$topic]);
-        // FindCoordinator...
-        $findCoordinatorRequest = new FindCoordinatorRequest();
-        $data = $findCoordinatorRequest->setKey(String16::value(App::$commonConfig->getGroupId()))->pack();
-        ['host' => $host, 'port' => $port] = Kafka::getInstance()->getRandBroker();
-        $socket = new Socket();
-        $socket->connect($host, $port)->send($data);
-        $socket->revcByKafka($findCoordinatorRequest);
-        $socket->close();
 
-        /** @var FindCoordinatorResponse $response */
-        $response = $findCoordinatorRequest->response;
-        if ($response->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-            throw new FindCoordinatorRequestException(sprintf('FindCoordinatorRequest request error, the error message is: %s',
-                ProtocolErrorEnum::getTextByCode($response->getErrorCode()->getValue())));
-        }
-        $host = $response->getHost()->getValue();
-        $port = (int)$response->getPort()->getValue();
+        $partitions = Kafka::getInstance()->getPartitions();
+        $partitions = $partitions[$topic];
+        $data = ListOffsetsApi::getInstance()->getListOffsets($topic, $partitions, $inTimestamp);
 
-        $result = DescribeGroupsApi::getInstance()->describe($host, $port, $group);
+        $data = [
+            'data'      => $data,
+            'timestamp' => $timestamp
+        ];
 
-        (new DescribeGruopsOutput())->output(new SymfonyStyle($input, $output), $result);
+        (new ListOffsetsOutput())->output(new SymfonyStyle($input, $output), $data);
     }
 }

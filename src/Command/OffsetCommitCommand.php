@@ -6,7 +6,10 @@ namespace Kafka\Command;
 use App\App;
 use Kafka\Api\DescribeGroupsApi;
 use Kafka\Api\ListOffsetsApi;
+use Kafka\Api\OffsetCommitApi;
+use Kafka\Api\OffsetFetchApi;
 use Kafka\Command\Output\DescribeGruopsOutput;
+use Kafka\Command\Output\OffsetCommitOutput;
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Event\StartBeforeEvent;
@@ -37,15 +40,15 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
-class DescribeGroupsCommand extends Command
+class OffsetCommitCommand extends Command
 {
-    protected static $defaultName = 'kafka.describe_groups';
+    protected static $defaultName = 'kafka.offset_commit';
 
     protected function configure()
     {
         $this
-            ->setDescription('See consumer group details')
-            ->setHelp('See consumer group details...')
+            ->setDescription('Submit offset consumer group')
+            ->setHelp('Submit offset consumer group...')
             ->addOption(
                 'topic',
                 't',
@@ -56,6 +59,15 @@ class DescribeGroupsCommand extends Command
                 'g',
                 InputOption::VALUE_REQUIRED,
                 'Which consumer group?'
+            )->addOption(
+                'partition',
+                'p',
+                InputOption::VALUE_REQUIRED,
+                'Which consumer group?'
+            )->addArgument(
+                'offset',
+                InputArgument::REQUIRED,
+                'offset'
             );
     }
 
@@ -70,8 +82,14 @@ class DescribeGroupsCommand extends Command
     {
         $group = $input->getOption('group');
         $topic = $input->getOption('topic');
+        $partition = (int)$input->getOption('partition');
+        $offset = (int)$input->getArgument('offset');
 
         MetadataManager::getInstance()->registerConfig()->registerMetadataInfo([$topic]);
+
+        $partitions = Kafka::getInstance()->getPartitions();
+        $partitions = $partitions[$topic];
+
         // FindCoordinator...
         $findCoordinatorRequest = new FindCoordinatorRequest();
         $data = $findCoordinatorRequest->setKey(String16::value(App::$commonConfig->getGroupId()))->pack();
@@ -90,8 +108,22 @@ class DescribeGroupsCommand extends Command
         $host = $response->getHost()->getValue();
         $port = (int)$response->getPort()->getValue();
 
-        $result = DescribeGroupsApi::getInstance()->describe($host, $port, $group);
+        $allPartitions = [
+            $topic => $partitions,
+        ];
+        $data1 = OffsetFetchApi::getInstance()->setHost($host)->setPort($port)
+                               ->getOffsetByGroupAndTopicAndPartitions($group, $allPartitions);
 
-        (new DescribeGruopsOutput())->output(new SymfonyStyle($input, $output), $result);
+        OffsetCommitApi::getInstance()->topicPartitionOffsetCommit($group, $topic, $partition, $offset);
+
+        $data2 = OffsetFetchApi::getInstance()->setHost($host)->setPort($port)
+                               ->getOffsetByGroupAndTopicAndPartitions($group, $allPartitions);
+
+        $data = [
+            'before' => $data1,
+            'after'  => $data2
+        ];
+
+        (new OffsetCommitOutput())->output(new SymfonyStyle($input, $output), $data);
     }
 }

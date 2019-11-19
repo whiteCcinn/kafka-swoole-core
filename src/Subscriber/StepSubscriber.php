@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Subscriber;
 
+use App\App;
 use Kafka\Api\OffsetCommitApi;
 use Kafka\ClientKafka;
 use Kafka\Enum\ClientApiModeEnum;
@@ -38,8 +39,12 @@ class StepSubscriber implements EventSubscriberInterface
         $offset = $event->getOffset();
         ClientKafka::getInstance()->setTopicPartitionOffset($topic, $partition, $offset);
         if ($event->getType() === ClientApiModeEnum::LOW_LEVEL) {
-            OffsetCommitApi::getInstance()->topicPartitionOffsetCommit($event->getTopic(), $event->getPartition(),
-                $event->getOffset());
+            OffsetCommitApi::getInstance()
+                           ->topicPartitionOffsetCommit(
+                               App::$commonConfig->getGroupId(),
+                               $event->getTopic(),
+                               $event->getPartition(),
+                               $event->getOffset());
         }
     }
 }

@@ -36,9 +36,9 @@ class ListOffsetsApi extends AbstractApi
     {
         $listOffsetsRequest = new ListOffsetsRequest();
 
-        $setPartitions = [];
         $result = [];
         foreach ($partitions as $partition) {
+            $setPartitions = [];
             $leaderId = Kafka::getInstance()->getTopicsPartitionLeaderByTopicAndPartition($topic, $partition);
             ['host' => $host, 'port' => $port] = Kafka::getInstance()->getBrokerInfoByNodeId($leaderId);
             $setPartitions[] = (new PartitionsListsOffsets())->setPartition(Int32::value($partition))
@@ -62,15 +62,22 @@ class ListOffsetsApi extends AbstractApi
                 foreach ($response->getPartitionResponses() as $partitionResponse) {
                     if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                         throw new ListOffsetsRequestException(sprintf('ListOffsets request error, the error message is: %s',
-                            ProtocolErrorEnum::getTextByCode($partition->getErrorCode()->getValue())));
+                            ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
                     }
+                    $offsets = $partitionResponse->getOffsets();
                     if (count($partitionResponse->getOffsets()) > 1) {
-                        [$highWatermark, $offset] = $partitionResponse->getOffsets();
+                        $offset = end($offsets);
+                        $highWatermark = reset($offsets);
                         $offset = $offset->getValue();
                         $highWatermark = $highWatermark->getValue();
                     } else {
-                        $offset = current($partitionResponse->getOffsets())->getValue();
-                        $highWatermark = $offset;
+                        if (!empty(current($offsets))) {
+                            $offset = current($offsets)->getValue();
+                            $highWatermark = $offset;
+                        } else {
+                            $offset = -1;
+                            $highWatermark = -1;
+                        }
                     }
 
                     $result[] = [

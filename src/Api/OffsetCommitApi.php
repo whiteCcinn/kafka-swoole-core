@@ -24,7 +24,7 @@ class OffsetCommitApi extends AbstractApi
      *
      * @throws OffsetCommitRequestException
      */
-    public function topicPartitionOffsetCommit(string $topic, int $partition, int $offset)
+    public function topicPartitionOffsetCommit(string $groupId,string $topic, int $partition, int $offset)
     {
         $offsetCommitRequest = new OffsetCommitRequest();
 
@@ -32,7 +32,7 @@ class OffsetCommitApi extends AbstractApi
             (new PartitionsOffsetCommit())->setPartitionIndex(Int32::value($partition))
                                           ->setCommittedOffset(Int64::value($offset))
                                           ->setCommittedMetadata(String16::value(''))
-        ])])->setGroupId(String16::value(App::$commonConfig->getGroupId()));
+        ])])->setGroupId(String16::value($groupId));
         $leaderId = Kafka::getInstance()->getTopicsPartitionLeaderByTopicAndPartition($topic, $partition);
         $socket = Kafka::getInstance()->getSocketByNodeId($leaderId);
         $data = $offsetCommitRequest->pack();

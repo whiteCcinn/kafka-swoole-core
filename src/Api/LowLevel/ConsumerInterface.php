@@ -5,5 +5,5 @@ namespace Kafka\Api\LowLevel;
 
 interface ConsumerInterface
 {
-    public function handler(int $offset, string $message);
+    public function handler(string $topic, int $partition, int $offset, string $message);
 }

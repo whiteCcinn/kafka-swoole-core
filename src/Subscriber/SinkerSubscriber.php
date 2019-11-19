@@ -12,6 +12,7 @@ use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Enum\ProtocolPartitionAssignmentStrategyEnum;
 use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Enum\ProtocolVersionEnum;
+use Kafka\Enum\StorageOffsetCommitTypeEnum;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
@@ -99,14 +100,30 @@ class SinkerSubscriber implements EventSubscriberInterface
         /** @var RedisStorage $storage */
         $storage = RedisStorage::getInstance();
         $adapter->setAdaptee($storage);
+        $batchNum = $this->getBatchSinkNum();
         while (true) {
-            $messages = $adapter->pop();
-            $acks = SinkerController::getInstance()->handler($messages);
-            foreach ($messages as $k => $info) {
-                if ($acks[$k]) {
-                    $storage->ack($info);
-                }
+            $messages = $adapter->pop($batchNum);
+            ['type' => $type] = SinkerController::getInstance()->handler($messages);
+            if($type === StorageOffsetCommitTypeEnum::AUTO) {
+                $adapter->ack($messages);
             }
         }
+    }
+
+    /**
+     * @return int
+     */
+    private function getBatchSinkNum(): int
+    {
+        static $num;
+
+        if ($num === null) {
+            $num = (int)env('KAFKA_MAX_FETCH_MESSAGE_NUM', 1);
+            if ($num <= 0) {
+                $num = 1;
+            }
+        }
+
+        return $num;
     }
 }

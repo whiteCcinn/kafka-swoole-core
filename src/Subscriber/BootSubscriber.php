@@ -6,6 +6,9 @@ namespace Kafka\Subscriber;
 use App\App;
 use App\Subscriber\ApiSubscriber;
 use Kafka\Command\DescribeGroupsCommand;
+use Kafka\Command\ListOffsetsCommand;
+use Kafka\Command\OffsetCommitCommand;
+use Kafka\Command\OffsetFetchCommand;
 use Kafka\Command\ProducerCommand;
 use Kafka\Command\RetranCommand;
 use Kafka\Command\RpcCommand;
@@ -65,6 +68,9 @@ class BootSubscriber implements EventSubscriberInterface
         App::$application->add(new RpcCommand());
         App::$application->add(new DescribeGroupsCommand());
         App::$application->add(new RetranCommand());
+        App::$application->add(new OffsetCommitCommand());
+        App::$application->add(new ListOffsetsCommand());
+        App::$application->add(new OffsetFetchCommand());
         App::$application->run();
     }
 

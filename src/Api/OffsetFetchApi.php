@@ -19,45 +19,87 @@ use App\App;
 
 class OffsetFetchApi extends AbstractApi
 {
-    public function getOffsetByTopicAndPartitions(string $topic, array $partitions): array
+    private $host;
+
+    private $port;
+
+    /**
+     * @return mixed
+     */
+    public function getHost()
     {
-        /** @var \Kafka\Config\CommonConfig $commonConfig */
-        $commonConfig = App::$commonConfig;
+        return $this->host;
+    }
+
+    /**
+     * @param mixed $host
+     *
+     * @return OffsetFetchApi
+     */
+    public function setHost($host)
+    {
+        $this->host = $host;
+
+        return $this;
+    }
+
+    /**
+     * @return mixed
+     */
+    public function getPort()
+    {
+        return $this->port;
+    }
+
+    /**
+     * @param mixed $port
+     *
+     * @return OffsetFetchApi
+     */
+    public function setPort($port)
+    {
+        $this->port = $port;
+
+        return $this;
+    }
+
+    public function getOffsetByGroupAndTopicAndPartitions(string $groupId, array $allPartitions): array
+    {
         $offsetFetchRequest = new OffsetFetchRequest();
-        $offsetFetchRequest->setGroupId(String16::value($commonConfig->getGroupId()));
-        $setPartitions = [];
-        foreach ($partitions as $partition) {
-            $setPartitions[] = (new PartitionsOffsetFetch())->setPartition(Int32::value($partition));
+        $offsetFetchRequest->setGroupId(String16::value($groupId));
+        $setTopics = [];
+        foreach ($allPartitions as $topic => $partitions) {
+            $topicsOffsetFetch = (new TopicsOffsetFetch())->setTopic(String16::value($topic));
+            $setPartitions = [];
+            foreach ($partitions as $partition) {
+                $setPartitions[] = (new PartitionsOffsetFetch())->setPartition(Int32::value($partition));
+            }
+            $setTopics[] = $topicsOffsetFetch->setPartitions($setPartitions);
         }
-        $offsetFetchRequest->setTopics([
-            (new TopicsOffsetFetch())->setTopic(String16::value($topic))->setPartitions($setPartitions)
-        ]);
+        $offsetFetchRequest->setTopics($setTopics);
         $data = $offsetFetchRequest->pack();
         $socket = new Socket();
-        $host = ClientKafka::getInstance()->getOffsetConnectHost();
-        $port = ClientKafka::getInstance()->getOffsetConnectPort();
-        $socket->connect($host, $port)->send($data);
+        $socket->connect($this->getHost(), $this->getPort())->send($data);
         $socket->revcByKafka($offsetFetchRequest);
-
-        $result = [];
 
         /** @var OffsetFetchResponse $response */
         $response = $offsetFetchRequest->response;
+        $result = [];
         try {
-            $needChangeApiVersion = [];
+            $needChangeApiVersion = true;
             foreach ($response->getResponses() as $response) {
                 foreach ($response->getPartitionResponses() as $partitionResponse) {
                     // need change api version
-                    if ($partitionResponse->getOffset()->getValue() === -1 && $partitionResponse->getMetadata()
-                                                                                                ->getValue() === '') {
-                        $needChangeApiVersion[] = true;
-                    } else {
+
+                    $offset = $partitionResponse->getOffset()->getValue();
+
+                    if ($offset >= 0) {
+                        $needChangeApiVersion = false;
                         if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                             throw new OffsetFetchRequestException(sprintf('Api Version 0, OffsetFetchRequest request error, the error message is: %s',
                                 ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
                         }
                     }
-                    $needChangeApiVersion[] = false;
 
                     $result[] = [
                         'topic'     => $response->getTopic()->getValue(),
@@ -66,7 +108,7 @@ class OffsetFetchApi extends AbstractApi
                     ];
                 }
             }
-            if (count(array_unique($needChangeApiVersion)) === 1 && current($needChangeApiVersion) === true) {
+            if ($needChangeApiVersion) {
                 throw new ClientException(
                     sprintf('Offset does not exist in zookeeper, but in kafka. Therefore, API version needs to be changed')
                 );
@@ -86,6 +128,28 @@ class OffsetFetchApi extends AbstractApi
                             ProtocolErrorEnum::getTextByCode($partitionResponse->getErrorCode()->getValue())));
                     }
 
+                    $offset = $partitionResponse->getOffset()->getValue();
+
+                    ClientKafka::getInstance()
+                               ->getTopicPartitionListOffsets(
+                                   $response->getTopic()
+                                            ->getValue(),
+                                   $partitionResponse->getPartition()
+                                                     ->getValue()
+                               );
+                    if ($offset === -1) {
+                        ['offset' => $offset, 'highWatermark' => $highWatermark] = ClientKafka::getInstance()
+                                                                                              ->getTopicPartitionListOffsets(
+                                                                                                  $response->getTopic()
+                                                                                                           ->getValue(),
+                                                                                                  $partitionResponse->getPartition()
+                                                                                                                    ->getValue()
+                                                                                              );
+
+                        if (App::$commonConfig->getAutoOffsetReset() === OffsetResetEnum::getTextByCode(OffsetResetEnum::LARGEST)) {
+                            $offset = $highWatermark - 1;
+                        }
+                    }
                     $result[] = [
                         'topic'     => $response->getTopic()->getValue(),
                         'partition' => $partitionResponse->getPartition()->getValue(),

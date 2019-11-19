@@ -16,6 +16,7 @@ use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
 use Kafka\Event\CoreLogicEvent;
 use Kafka\Event\FetchMessageEvent;
+use Kafka\Event\FetchMessagesEvent;
 use Kafka\Event\HeartbeatEvent;
 use Kafka\Event\OffsetCommitEvent;
 use Kafka\Exception\ClientException;
@@ -129,7 +130,7 @@ class CoreSubscriber implements EventSubscriberInterface
                     }
                 } catch (\Exception $e) {
                     KafkaLog::getInstance()->warning($e->getMessage());
-                    $socket->close();
+                    $this->rebalance(App::$commonConfig, $socket);
                 } catch (\Error $error) {
                     KafkaLog::getInstance()->error($error->getMessage());
                     $socket->close();
@@ -249,9 +250,6 @@ class CoreSubscriber implements EventSubscriberInterface
         dispatch(new HeartbeatEvent(), HeartbeatEvent::NAME);
 
         go(function () {
-//            defer(function () {
-//                throw new ClientException('Fetch request coroutine aborted unexpectedly');
-//            });
             while (true) {
                 // fetch data
                 $fetchRequest = new FetchRequest();
@@ -312,9 +310,8 @@ class CoreSubscriber implements EventSubscriberInterface
                         }
                     }
 
-                    foreach ($messages as $item) {
-                        ['topic' => $topic, 'partition' => $partition, 'offset' => $offset, 'message' => $message] = $item;
-                        dispatch(new FetchMessageEvent($topic, $partition, $offset, $message), FetchMessageEvent::NAME);
+                    if (!empty($messages)) {
+                        dispatch(new FetchMessagesEvent($messages), FetchMessagesEvent::NAME);
                     }
                 }
             }
