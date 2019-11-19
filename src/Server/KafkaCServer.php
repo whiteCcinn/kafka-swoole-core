@@ -354,7 +354,7 @@ class KafkaCServer
                             $params = $msg['params'];
                         }
 
-                        if (isset($params)) {
+                        if (!isset($params)) {
                             $result = call_user_func([(new $rpc), $method]);
                         } else {
                             $result = call_user_func([(new $rpc), $method], $params);

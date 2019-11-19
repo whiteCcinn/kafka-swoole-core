@@ -85,4 +85,14 @@ class StorageAdapter implements StorageInterface
     {
         return $this->adaptee->retran($fn);
     }
+
+    /**
+     * @param callable|null $fn
+     *
+     * @return mixed
+     */
+    public function clear(callable $fn = null)
+    {
+        return $this->adaptee->clear($fn);
+    }
 }

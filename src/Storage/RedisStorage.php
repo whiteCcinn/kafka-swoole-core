@@ -38,8 +38,8 @@ class RedisStorage
             if (preg_match('/[\s\S]*(?P<index>\d+)$/', env('KAFKA_STORAGE_REDIS'), $matches)) {
                 $this->configIndex = (int)$matches['index'];
             }
-            $this->pendingKey = env('APP_MODE') . ':' . env('KAFKA_STORAGE_REDIS_PENDING_KEY');
-            $this->processingKey = env('APP_MODE') . ':' . env('KAFKA_STORAGE_REDIS_PROCESSING_KEY');
+            $this->pendingKey = env('KAFKA_STORAGE_REDIS_PENDING_KEY');
+            $this->processingKey = env('KAFKA_STORAGE_REDIS_PROCESSING_KEY');
         }
     }
 
@@ -55,10 +55,10 @@ class RedisStorage
         /** @var Redis $redis */
         ['handler' => $redis] = RedisPool::getInstance($this->configIndex, true)->get($this->configIndex, true);
         $result = [];
-        $redis->lLen($this->pendingKey);
         CheckListLen:
+        $redis->lLen($this->pendingKey);
         if ($redis->recv() >= (int)env('KAFKA_STORAGE_REDIS_LIMIT', 40000)) {
-            sleep(1);
+            \co::sleep(1);
             goto CheckListLen;
         }
         foreach ($data as $item) {
@@ -189,6 +189,41 @@ class RedisStorage
                     $number--;
                 }
             }
+        }
+
+        RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+
+        return true;
+    }
+
+    /**
+     * @return bool
+     * @throws \Exception
+     */
+    public function clear(callable $fn = null): bool
+    {
+        $this->init();
+        /** @var Redis $redis */
+        ['handler' => $redis] = RedisPool::getInstance($this->configIndex)->get($this->configIndex);
+        $number = $redis->lLen($this->processingKey);
+        if ($fn !== null && is_callable($fn)) {
+            $datas = $redis->lRange($this->processingKey, 0, -1);
+            $lastprocessingCount = $redis->lLen($this->processingKey);
+            foreach ($datas as $item) {
+                $ret = $fn($item);
+                if ($ret) {
+                    $remRet = $redis->lRem($this->processingKey, $item, 1);
+                }
+            }
+
+            RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
+            if ($pushRet > $lastCount && $remRet < $lastprocessingCount) {
+                return true;
+            } else {
+                return false;
+            }
+        } else {
+            $data = $redis->del($this->processingKey);
         }
 
         RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
