@@ -177,7 +177,7 @@ class RedisStorage
             }
 
             RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
-            if ($pushRet > $lastCount && $remRet < $lastprocessingCount) {
+            if ($pushRet > $lastPendingCount && $remRet < $lastprocessingCount) {
                 return true;
             } else {
                 return false;
@@ -217,7 +217,7 @@ class RedisStorage
             }
 
             RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
-            if ($pushRet > $lastCount && $remRet < $lastprocessingCount) {
+            if ($remRet < $lastprocessingCount) {
                 return true;
             } else {
                 return false;

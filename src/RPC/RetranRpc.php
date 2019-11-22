@@ -42,7 +42,7 @@ class RetranRpc extends BaseRpc
 
             RedisPool::getInstance()->put($redis);
 
-            return $blockSize;
+            return $processingSize;
         }
 
         return 0;

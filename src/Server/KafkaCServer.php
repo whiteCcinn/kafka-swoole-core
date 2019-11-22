@@ -40,7 +40,7 @@ class KafkaCServer
     private static $instance;
 
     /**
-     * @var Server $server
+     * @var Socket $server
      */
     private $server;
 

@@ -5,12 +5,14 @@ namespace Kafka\Support;
 
 use Kafka\Api\MetadataApi;
 use Kafka\Api\OffsetCommitApi;
+use Kafka\Api\OffsetFetchApi;
 use Kafka\Api\ProducerApi;
 use Kafka\ClientKafka;
 use Kafka\Config\CommonConfig;
 use Kafka\Kafka;
 use Kafka\Log\KafkaLog;
 use Kafka\Manager\MetadataManager;
+use Kafka\Storage\RedisStorage;
 
 trait SingletonTrait
 {
@@ -18,7 +20,7 @@ trait SingletonTrait
 
     /**
      * Need to be compatible php 7.1.x, so this scene cannot be specified return type `object`
-     * @return MetadataManager | CommonConfig | Kafka | ClientKafka | ProducerApi | MetadataApi | OffsetCommitApi | KafkaLog
+     * @return MetadataManager | CommonConfig | Kafka | ClientKafka | ProducerApi | MetadataApi | OffsetCommitApi | KafkaLog | RedisStorage | OffsetFetchApi
      */
     public static function getInstance()
     {
