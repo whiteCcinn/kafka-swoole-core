@@ -82,9 +82,9 @@ class KafkaCServer
 
     private function createMasterUnixFile()
     {
-        if (!file_exists(self::getMatserSockFile())) {
+        if (!file_exists(self::getMasterSockFile())) {
             $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
-            $this->server->bind(self::getMatserSockFile());
+            $this->server->bind(self::getMasterSockFile());
             $this->server->listen(128);
             $this->masterPid = posix_getpid();
         }
@@ -151,7 +151,7 @@ class KafkaCServer
                             }
                         }
                         $result = call_user_func([(new $rpc), Str::camel('on_' . $method)], $ret);
-                        $path = self::getMatserSockFile();
+                        $path = self::getMasterSockFile();
                         $data = json_encode($result);
                         $package = pack('N', strlen($data)) . $data;
                         $client->send($package);
@@ -172,7 +172,7 @@ class KafkaCServer
         return $msg;
     }
 
-    public static function getMatserSockFile(): string
+    public static function getMasterSockFile(): string
     {
         $dir = env('SERVER_AF_UNIX_DIR');
         if (!Str::endsWith($dir, '/')) {
