@@ -4,10 +4,12 @@ declare(strict_types=1);
 namespace Kafka\Server;
 
 use App\App;
+use App\ClientSinker;
 use App\Handler\HighLevelHandler;
 use Co\Socket;
 use Kafka\Api\LeaveGroupApi;
 use Kafka\ClientKafka;
+use Kafka\Enum\CoroutinesEnum;
 use Kafka\Enum\RpcRoleEnum;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
@@ -82,12 +84,13 @@ class KafkaCServer
 
     private function createMasterUnixFile()
     {
-        if (!file_exists(self::getMatserSockFile())) {
-            $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
-            $this->server->bind(self::getMatserSockFile());
-            $this->server->listen(128);
-            $this->masterPid = posix_getpid();
+        if (file_exists(self::getMatserSockFile())) {
+            @unlink(self::getMatserSockFile());
         }
+        $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
+        $this->server->bind(self::getMatserSockFile());
+        $this->server->listen(128);
+        $this->masterPid = posix_getpid();
     }
 
     /**
@@ -220,12 +223,14 @@ class KafkaCServer
             }
         }
 
-        if (count($ret) === count($process)) {
-            $io->success('[-] Server stoped');
-            exit(0);
-        } else {
-            $io->error('[-] Server stoped...');
-            exit(1);
+        while (true) {
+            if (count($ret) === count($process)) {
+                $io->success('[-] Server stoped');
+                exit(0);
+            } else {
+                $io->error('[-] Waiting Server stoped...');
+                exit(0);
+            }
         }
 
         return true;
@@ -267,10 +272,18 @@ class KafkaCServer
             $index = $this->nextSinkerIndex;
             $this->nextSinkerIndex++;
         }
-        $process = new Process(function (Process $process) use($index) {
+        $process = new Process(function (Process $process) use ($index) {
             swoole_set_process_name($this->getProcessName('sinker'));
             dispatch(new SetSinkerProcessNameEvent($index), SetSinkerProcessNameEvent::NAME);
             Runtime::enableCoroutine(true, SWOOLE_HOOK_ALL);
+
+            Process::signal(SIGTERM, function () use ($process) {
+                App::$closing = true;
+            });
+
+            Process::signal(SIGINT, function () use ($process) {
+                App::$closing = true;
+            });
 
             go(function () {
                 dispatch(new SinkerOtherEvent(), SinkerOtherEvent::NAME);
@@ -280,9 +293,9 @@ class KafkaCServer
                 while (true) {
                     $this->checkMasterPid($process);
                     KafkaLog::getInstance()
-                            ->info(sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
-                                getmypid(), 60));
-                    co::sleep(60);
+                            ->info(sprintf('Sinker Process pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
+                                getmypid(), 300));
+                    co::sleep(300);
                 }
             });
 
@@ -292,6 +305,7 @@ class KafkaCServer
             });
         }, false, 1, true);
 
+        ClientSinker::getInstance()->setProcess($process)->setIndex($index);
         $pid = $process->start();
         $this->sinkerProcesses[$index] = $pid;
 
@@ -373,7 +387,7 @@ class KafkaCServer
                 while (true) {
                     $this->checkMasterPid($process);
                     KafkaLog::getInstance()
-                            ->info(sprintf('pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
+                            ->info(sprintf('Kafkaer Process pid:%d,Check if the service master process exists every %s seconds...' . PHP_EOL,
                                 getmypid(), 60));
                     co::sleep(60);
                 }
@@ -387,6 +401,7 @@ class KafkaCServer
             });
         }, false, 1, true);
 
+        ClientKafka::getInstance()->setProcess($process)->setIndex($index);
         $pid = $process->start();
         $this->kafkaProcesses[$index] = $pid;
 

@@ -56,6 +56,7 @@ class MetadataRpc extends BaseRpc
             $result = $result + $infos;
         }
 
+        var_dump($multipleInfos);
         return $result;
     }
 }

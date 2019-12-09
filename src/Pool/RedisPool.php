@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Pool;
 
+use Kafka\Log\KafkaLog;
 use \Swoole\Coroutine\Channel;
 use \Swoole\Coroutine\Redis;
 use \RuntimeException;
@@ -102,7 +103,8 @@ class RedisPool
         $redis = new Redis();
         $res = $redis->connect($host, $port);
         if ($res == false) {
-            throw new RuntimeException("failed to connect redis server.");
+            KafkaLog::getInstance()->error("failed to connect redis server.{$host}:{$port}");
+            throw new RuntimeException("failed to connect redis server.{$host}:{$port}");
         } else {
             if ($auth !== null) {
                 $redis->auth($auth);
@@ -163,6 +165,7 @@ class RedisPool
                 }
             }
         } catch (\Exception $e) {
+            KafkaLog::getInstance()->warning('Redis pool has exception' . $e->getMessage());
             $this->createConnect($index, $pipe);
             goto pop;
         }

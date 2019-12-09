@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace Kafka\Storage;
 
+use App\App;
 use Kafka\Pool\RedisPool;
 use Kafka\Support\SingletonTrait;
 use SebastianBergmann\CodeCoverage\Report\PHP;
@@ -90,17 +91,27 @@ class RedisStorage
         $this->init();
         /** @var Redis $redis */
         ['handler' => $redis] = RedisPool::getInstance($this->configIndex, true)->get($this->configIndex, true);
+        App::switchRunState();
         $messages = [];
         $originNum = $number;
 
         $startTime = time();
         $needReturn = false;
         Rpoplpush:
+
+        // interrupt logic
+        if (App::$closing) {
+            goto ForcedReturen;
+        }
+
         $i = 0;
         while ($i < $number) {
-            if ((time() - $startTime > 60) && !empty($messages)) {
-                $needReturn = true;
-                goto Recv;
+            if ((time() - $startTime > 60)) {
+                if(!empty($messages)) {
+                    goto ForcedReturen;
+                }else{
+                    $startTime = time();
+                }
             }
             $redis->rpoplpush($this->pendingKey, $this->processingKey);
             $i++;
@@ -114,7 +125,8 @@ class RedisStorage
             }
             $i--;
         }
-        if (($lastCount = $originNum - count($messages)) > 0 && $needReturn === false) {
+
+        if (($lastCount = $originNum - count($messages)) > 0) {
             $number = $lastCount;
             if (count($messages) === 0) {
                 \co::sleep(1);
@@ -122,8 +134,9 @@ class RedisStorage
             goto Rpoplpush;
         }
 
+        ForcedReturen:
         RedisPool::getInstance($this->configIndex, true)->put($redis, $this->configIndex, true);
-
+        
         return $messages;
     }
 
@@ -177,7 +190,7 @@ class RedisStorage
             }
 
             RedisPool::getInstance($this->configIndex)->put($redis, $this->configIndex);
-            if ($pushRet > $lastCount && $remRet < $lastprocessingCount) {
+            if ($pushRet > $lastPendingCount && $remRet < $lastprocessingCount) {
                 return true;
             } else {
                 return false;

@@ -7,6 +7,7 @@ namespace Kafka\Log;
 use Kafka\Enum\LogLevelEnum;
 use Kafka\Support\SingletonTrait;
 use Monolog\Formatter\LineFormatter;
+use Monolog\Handler\RotatingFileHandler;
 use Monolog\Logger;
 use Monolog\Handler\StreamHandler;
 
@@ -34,11 +35,23 @@ class KafkaLog
         $this->logger = new Logger(env('APP_NAME'));
         $level = env('KAFKA_LOG_LEVEL');
         // If debug mode, output in the terminal
-        if($level !== LogLevelEnum::getTextByCode(LogLevelEnum::DEBUG)) {
+        if ($level !== LogLevelEnum::getTextByCode(LogLevelEnum::DEBUG)) {
             foreach ($this->logs as $log) {
-                $stream = new StreamHandler(env('KAFKA_LOG_DIR') . '/' . $log['path'], $log['level']);
-                $stream->setFormatter($formatter);
-                $this->logger->pushHandler($stream);
+                if (LogLevelEnum::getCodeByText($level) === $log['level']) {
+                    $stream = new RotatingFileHandler(
+                        env('KAFKA_LOG_DIR') . '/' . $log['path'],
+                        30,
+                        $log['level'],
+                        true,
+                        null, true);
+                    $stream->setFormatter($formatter);
+                    $this->logger->pushHandler($stream);
+
+                    if (env('KAFKA_LOG_SDTOUT')) {
+                        $this->logger->pushHandler(new StreamHandler('php://stdout', Logger::DEBUG));
+                    }
+
+                }
             }
         }
 

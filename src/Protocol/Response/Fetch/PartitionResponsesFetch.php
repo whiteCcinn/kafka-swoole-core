@@ -3,7 +3,10 @@ declare(strict_types=1);
 
 namespace Kafka\Protocol\Response\Fetch;
 
+use App\App;
+use Kafka\ClientKafka;
 use Kafka\Enum\CompressionCodecEnum;
+use Kafka\Enum\CoroutinesEnum;
 use Kafka\Enum\ProtocolTypeEnum;
 use Kafka\Log\KafkaLog;
 use Kafka\Protocol\CommonResponse;
@@ -81,6 +84,7 @@ class PartitionResponsesFetch
         $startTime = time();
         $recordSet = [];
         while (is_string($protocol) && strlen($protocol) > 0) {
+
             $commonResponse = new CommonResponse();
             $instance = new MessageSetFetch();
             $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $protocol);
@@ -100,6 +104,7 @@ class PartitionResponsesFetch
                     continue;
                 }
                 InternalDecompression:
+
                 $instance = new MessageSetFetch();
                 $commonResponse->unpackProtocol(MessageSetFetch::class, $instance, $buffer);
                 // Insufficient reading sub-section, the message is put on the next read

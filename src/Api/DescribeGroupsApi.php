@@ -36,7 +36,7 @@ class DescribeGroupsApi extends AbstractApi
         foreach ($response->getGroups() as $response) {
             if ($response->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                 throw new DescribeGroupsRequestException(sprintf('DescribeGroups request error, the error message is: %s',
-                    ProtocolErrorEnum::getTextByCode($partition->getErrorCode()->getValue())));
+                    ProtocolErrorEnum::getTextByCode($response->getErrorCode()->getValue())));
             }
         }
 

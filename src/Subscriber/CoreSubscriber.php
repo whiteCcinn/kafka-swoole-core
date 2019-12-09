@@ -7,6 +7,7 @@ use App\App;
 use Kafka\ClientKafka;
 use Kafka\Config\CommonConfig;
 use Kafka\Enum\ClientApiModeEnum;
+use Kafka\Enum\CoroutinesEnum;
 use Kafka\Enum\OffsetResetEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Enum\ProtocolPartitionAssignmentStrategyEnum;
@@ -317,7 +318,6 @@ class CoreSubscriber implements EventSubscriberInterface
             }
         });
 
-
         // OffsetCommit...
         dispatch(new OffsetCommitEvent(), OffsetCommitEvent::NAME);
     }
@@ -459,19 +459,19 @@ class CoreSubscriber implements EventSubscriberInterface
         if (ClientKafka::getInstance()->isLeader()) {
             $assignments = [];
             foreach ($fetchSpec as $memberId => $tpt) {
-                $topic = key($tpt);
-                $partitions = current($tpt);
-                $groupAssignment = (new GroupAssignmentsSyncGroup())->setMemberId(
-                    String16::value($memberId)
-                );
                 $partitionAssignments = [];
-                $pushPartition = [];
-                $partitionAssignmentsSyncGroup = new PartitionAssignmentsSyncGroup();
-                foreach ($partitions as $partitionIndex) {
-                    $pushPartition[] = Int32::value($partitionIndex);
+                foreach ($tpt as $topic => $partitions) {
+                    $groupAssignment = (new GroupAssignmentsSyncGroup())->setMemberId(
+                        String16::value($memberId)
+                    );
+                    $pushPartition = [];
+                    $partitionAssignmentsSyncGroup = new PartitionAssignmentsSyncGroup();
+                    foreach ($partitions as $partitionIndex) {
+                        $pushPartition[] = Int32::value($partitionIndex);
+                    }
+                    $partitionAssignmentsSyncGroup->setTopic(String16::value($topic))->setPartition($pushPartition);
+                    $partitionAssignments[] = $partitionAssignmentsSyncGroup;
                 }
-                $partitionAssignmentsSyncGroup->setTopic(String16::value($topic))->setPartition($pushPartition);
-                $partitionAssignments[] = $partitionAssignmentsSyncGroup;
                 $groupAssignment->setMemberAssignment(
                     (new MemberAssignmentsSyncGroup())->setVersion(
                         Int16::value(ProtocolVersionEnum::API_VERSION_0)

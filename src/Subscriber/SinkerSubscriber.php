@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace Kafka\Subscriber;
 
 use App\App;
+use App\ClientSinker;
 use App\Controller\SinkerController;
 use Kafka\ClientKafka;
 use Kafka\Config\CommonConfig;
@@ -30,6 +31,7 @@ use Kafka\Exception\RequestException\OffsetCommitRequestException;
 use Kafka\Exception\RequestException\OffsetFetchRequestException;
 use Kafka\Exception\RequestException\SyncGroupRequestException;
 use Kafka\Kafka;
+use Kafka\Log\KafkaLog;
 use Kafka\Protocol\Request\Fetch\PartitionsFetch;
 use Kafka\Protocol\Request\Fetch\TopicsFetch;
 use Kafka\Protocol\Request\FetchRequest;
@@ -101,12 +103,26 @@ class SinkerSubscriber implements EventSubscriberInterface
         $storage = RedisStorage::getInstance();
         $adapter->setAdaptee($storage);
         $batchNum = $this->getBatchSinkNum();
+
+        if(ClientSinker::getInstance()->getIndex() === 0) {
+            $adapter->retran();
+        }
+
         while (true) {
-            $messages = $adapter->pop($batchNum);
-            ['type' => $type] = SinkerController::getInstance()->handler($messages);
-            if($type === StorageOffsetCommitTypeEnum::AUTO) {
-                $adapter->ack($messages);
+            // interrupt Logic
+            if (App::$closing) {
+                KafkaLog::getInstance()->info(sprintf('The Sinker process {%d} exits with a normal delay',
+                    ClientSinker::getInstance()->getIndex()));
+                ClientSinker::getInstance()->getProcess()->exit(0);
             }
+            $messages = $adapter->pop($batchNum);
+            if (!empty($messages)) {
+                ['type' => $type, 'success' => $success] = SinkerController::getInstance()->handler($messages);
+                if ($type === StorageOffsetCommitTypeEnum::AUTO && $success === true) {
+                    $adapter->ack($messages);
+                }
+            }
+            App::switchRunState();
         }
     }
 

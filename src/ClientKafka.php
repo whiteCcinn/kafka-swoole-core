@@ -3,9 +3,11 @@ declare(strict_types=1);
 
 namespace Kafka;
 
+use Kafka\Log\KafkaLog;
 use Kafka\Protocol\Response\JoinGroup\MembersJoinGroup;
 use Kafka\Socket\Socket;
 use Kafka\Support\SingletonTrait;
+use Swoole\Process;
 
 /**
  * Class ClientKafka
@@ -15,6 +17,21 @@ use Kafka\Support\SingletonTrait;
 class ClientKafka
 {
     use SingletonTrait;
+
+    /**
+     * @var Process $process
+     */
+    private $process;
+
+    /**
+     * @var int $index
+     */
+    private $index;
+
+    /**
+     * @var array $cids
+     */
+    private $cids = [];
 
     /**
      * @var array $offsetConnect
@@ -516,6 +533,68 @@ class ClientKafka
     public function setIsJoined(bool $isJoined): ClientKafka
     {
         $this->isJoined = $isJoined;
+
+        return $this;
+    }
+
+    /**
+     * @return Process
+     */
+    public function getProcess(): Process
+    {
+        return $this->process;
+    }
+
+    /**
+     * @param Process $process
+     *
+     * @return ClientKafka
+     */
+    public function setProcess(Process $process): ClientKafka
+    {
+        $this->process = $process;
+
+        return $this;
+    }
+
+    /**
+     * @return int
+     */
+    public function getIndex(): int
+    {
+        return $this->index;
+    }
+
+    /**
+     * @param int $index
+     *
+     * @return ClientKafka
+     */
+    public function setIndex(int $index): ClientKafka
+    {
+        $this->index = $index;
+
+        return $this;
+    }
+
+    public function yield(int $cid): self
+    {
+        $this->cids[$cid]['status'] = 'yield';
+        \co::yield();
+
+        return $this;
+    }
+
+    public function resume(int $cid): self
+    {
+        if (isset($this->cids[$cid])) {
+            if ($this->cids[$cid]['status'] === 'yield') {
+                $this->cids[$cid]['status'] = 'resume';
+                \co::resume($cid);
+            }
+        } else {
+            \co::sleep(1);
+        }
 
         return $this;
     }
