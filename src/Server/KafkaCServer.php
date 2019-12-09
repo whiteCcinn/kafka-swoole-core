@@ -83,12 +83,13 @@ class KafkaCServer
     {
         if (file_exists(self::getMasterSockFile())) {
             @unlink(self::getMasterSockFile());
-            if (!file_exists(self::getMasterSockFile())) {
-                $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
-                $this->server->bind(self::getMasterSockFile());
-                $this->server->listen(128);
-                $this->masterPid = posix_getpid();
-            }
+        }
+
+        if (!file_exists(self::getMasterSockFile())) {
+            $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
+            $this->server->bind(self::getMasterSockFile());
+            $this->server->listen(128);
+            $this->masterPid = posix_getpid();
         }
     }
 
