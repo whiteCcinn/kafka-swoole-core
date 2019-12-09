@@ -14,6 +14,7 @@ use Kafka\Command\Output\OffsetFetchOutput;
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
 use Kafka\Event\StartBeforeEvent;
+use Kafka\Exception\RequestException\FindCoordinatorRequestException;
 use Kafka\Kafka;
 use Kafka\Manager\MetadataManager;
 use Kafka\Protocol\Request\DescribeGroupsRequest;
