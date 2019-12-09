@@ -62,6 +62,7 @@ class MetadataApi extends AbstractApi
             $response = $metadataRequest->response;
             $partitions = [];
             $topicsPartitionLeader = $leaderTopicPartition = [];
+            $brokers = toValue($response->getBrokers());
             /** @var TopicMetadata $topicMetadata */
             foreach ($response->getTopics() as $topicMetadata) {
                 /** @var PartitionMetadata $partitionMetadata */
@@ -81,7 +82,8 @@ class MetadataApi extends AbstractApi
             return [
                 'partitions'           => $partitions,
                 'topicPartitionLeader' => $topicsPartitionLeader,
-                'leaderTopicPartition' => $leaderTopicPartition
+                'leaderTopicPartition' => $leaderTopicPartition,
+                'brokers'              => $brokers
             ];
         }
 

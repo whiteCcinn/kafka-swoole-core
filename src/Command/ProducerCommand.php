@@ -94,7 +94,7 @@ class ProducerCommand extends Command
         Send:
         MetadataManager::getInstance()->registerConfig()->registerMetadataInfo([$topic]);
         $topicPartitionLeaders = Kafka::getInstance()->getTopicsPartitionLeader();
-        $topicPartition = isset($partitions[$topic]) ? $partitions[$topic] : [0];
+        $topicPartition = isset($topicPartitionLeaders[$topic]) ? array_keys($topicPartitionLeaders[$topic]) : [0];
         $topicPartitionLeader = isset($topicPartitionLeaders[$topic]) ? $topicPartitionLeaders[$topic] : current($topicPartitionLeaders);
         // Range
         if ($partition === null && $key === null) {
