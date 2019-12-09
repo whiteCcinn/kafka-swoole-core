@@ -9,7 +9,6 @@ use App\Handler\HighLevelHandler;
 use Co\Socket;
 use Kafka\Api\LeaveGroupApi;
 use Kafka\ClientKafka;
-use Kafka\Enum\CoroutinesEnum;
 use Kafka\Enum\RpcRoleEnum;
 use Kafka\Event\CoreLogicAfterEvent;
 use Kafka\Event\CoreLogicBeforeEvent;
@@ -21,11 +20,9 @@ use Kafka\Event\SetSinkerProcessNameEvent;
 use Kafka\Event\SinkerEvent;
 use Kafka\Event\SinkerOtherEvent;
 use Kafka\Log\KafkaLog;
-use Kafka\RPC\BaseRpc;
 use Kafka\Support\Str;
 use Swoole\Process;
 use Swoole\Runtime;
-use Swoole\Server;
 use \co;
 use Symfony\Component\Console\Input\ArgvInput;
 use Symfony\Component\Console\Output\ConsoleOutput;
@@ -42,7 +39,7 @@ class KafkaCServer
     private static $instance;
 
     /**
-     * @var Server $server
+     * @var Socket $server
      */
     private $server;
 
@@ -84,13 +81,15 @@ class KafkaCServer
 
     private function createMasterUnixFile()
     {
-        if (file_exists(self::getMatserSockFile())) {
-            @unlink(self::getMatserSockFile());
+        if (file_exists(self::getMasterSockFile())) {
+            @unlink(self::getMasterSockFile());
+            if (!file_exists(self::getMasterSockFile())) {
+                $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
+                $this->server->bind(self::getMasterSockFile());
+                $this->server->listen(128);
+                $this->masterPid = posix_getpid();
+            }
         }
-        $this->server = new Socket(AF_UNIX, SOCK_STREAM, 0);
-        $this->server->bind(self::getMatserSockFile());
-        $this->server->listen(128);
-        $this->masterPid = posix_getpid();
     }
 
     /**
@@ -154,7 +153,7 @@ class KafkaCServer
                             }
                         }
                         $result = call_user_func([(new $rpc), Str::camel('on_' . $method)], $ret);
-                        $path = self::getMatserSockFile();
+                        $path = self::getMasterSockFile();
                         $data = json_encode($result);
                         $package = pack('N', strlen($data)) . $data;
                         $client->send($package);
@@ -175,7 +174,7 @@ class KafkaCServer
         return $msg;
     }
 
-    public static function getMatserSockFile(): string
+    public static function getMasterSockFile(): string
     {
         $dir = env('SERVER_AF_UNIX_DIR');
         if (!Str::endsWith($dir, '/')) {

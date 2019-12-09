@@ -121,18 +121,18 @@ class RpcCommand extends Command
             ];
             $data = json_encode($cmd);
             $package = pack('N', strlen($data)) . $data;
-            $socket->connect(KafkaCServer::getMatserSockFile());
+            $socket->connect(KafkaCServer::getMasterSockFile());
             $socket->send($package);
 
-            $len = $socket->recv(4, 3);
+            $len = $socket->recv(4, floatval(3));
             $len = unpack('N', $len);
             $len = is_array($len) ? current($len) : $len;
-            $msg = $socket->recv($len, 3);
+            $msg = $socket->recv(intval($len), floatval(3));
             $socket->close();
             $ret = json_decode($msg, true);
             if (isset($this->commandType[$command]['output'])) {
-                /** @var AbstractOutput $outputClass */
                 $outputClass = $this->commandType[$command]['output'];
+                /** @var AbstractOutput $outputInstance */
                 $outputInstance = new $outputClass;
                 $outputInstance->output($io, $ret);
             } else {

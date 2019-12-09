@@ -85,7 +85,7 @@ class KafkaLog
      *
      * @return bool
      */
-    public function log(int $level = Logger:: INFO, string $msg, array $context = [])
+    public function log(int $level = Logger:: INFO, string $msg = '', array $context = [])
     {
         if (!$this->init) {
             $this->init();
