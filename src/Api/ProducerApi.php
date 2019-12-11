@@ -53,7 +53,6 @@ class ProducerApi extends AbstractApi
         $topics = implode(',', $topics);
 
         $result = MetadataApi::getInstance()->requestMetadata($this->connBrokerListMap[$conn], $topics);
-        $result = array_filter($result);
         if (empty($result)) {
             return false;
         }
@@ -95,10 +94,11 @@ class ProducerApi extends AbstractApi
      * @return bool
      */
     public function produce(string $conn, string $topic, ?int $partition, ?string $key, array $messages,
-                            $compress = CompressionCodecEnum::NORMAL): bool
+                            int $compress = CompressionCodecEnum::NORMAL): bool
     {
         try {
             if (!isset($this->connBrokerListMap[$conn])) {
+                Kafka::getInstance()->error('unknow conn, please set conn!');
                 return false;
             }
 
@@ -108,7 +108,7 @@ class ProducerApi extends AbstractApi
             }
             $partitions = isset($this->metadata[$conn]['topicPartitionLeader'][$topic]) ? array_keys($this->metadata[$conn]['topicPartitionLeader'][$topic]) : [];
             $topicPartitionLeaders = isset($this->metadata[$conn]['topicPartitionLeader']) ? $this->metadata[$conn]['topicPartitionLeader'] : [];
-            $topicPartition = isset($partitions[$topic]) ? $partitions[$topic] : [0];
+            $topicPartition = !empty($partitions) ? $partitions : [0];
             $topicPartitionLeader = isset($topicPartitionLeaders[$topic]) ? $topicPartitionLeaders[$topic] : current($topicPartitionLeaders);
             // Range
             if ($partition === null && $key === null) {
