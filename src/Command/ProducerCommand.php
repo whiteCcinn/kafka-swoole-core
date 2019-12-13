@@ -3,7 +3,9 @@ declare(strict_types=1);
 
 namespace Kafka\Command;
 
+use App\App;
 use Kafka\Api\ListOffsetsApi;
+use Kafka\Api\ProducerApi;
 use Kafka\Command\Output\ProducerOutput;
 use Kafka\Enum\CompressionCodecEnum;
 use Kafka\Enum\ProtocolErrorEnum;
@@ -40,6 +42,12 @@ class ProducerCommand extends Command
         $this
             ->setDescription('Send a message')
             ->setHelp('This command will help you send separate messages to a topic...')
+            ->addOption(
+                'brokers_list',
+                'l',
+                InputOption::VALUE_OPTIONAL,
+                'where are you want to send to kafka\'s cluster'
+            )
             ->addOption(
                 'topic',
                 't',
@@ -84,80 +92,27 @@ class ProducerCommand extends Command
     protected function execute(InputInterface $input, OutputInterface $output)
     {
 
+        $brokersList = $input->getOption('brokers_list');
         $topic = $input->getOption('topic');
-        $partition = $input->getOption('partition');
+        $partition = (int)$input->getOption('partition');
         $key = $input->getOption('key');
         $compress = (int)$input->getOption('compress');
         $repeat = (int)$input->getOption('repeat');
         $message = $input->getArgument('message');
-
-        Send:
         MetadataManager::getInstance()->registerConfig()->registerMetadataInfo([$topic]);
-        $topicPartitionLeaders = Kafka::getInstance()->getTopicsPartitionLeader();
-        $topicPartition = isset($topicPartitionLeaders[$topic]) ? array_keys($topicPartitionLeaders[$topic]) : [0];
-        $topicPartitionLeader = isset($topicPartitionLeaders[$topic]) ? $topicPartitionLeaders[$topic] : current($topicPartitionLeaders);
-        // Range
-        if ($partition === null && $key === null) {
-            shuffle($topicPartition);
-            $assignPartition = current($topicPartition);
-        } elseif ($partition === null && $key !== null) {
-            $assignPartition = crc32(md5($key)) % count($topicPartition);
-        } else {
-            // if ($partition !== null && $key !== null) || ($partition !== null && $key === null)
-            $assignPartition = (int)$partition;
-        }
-
-        // Compress
-        if ($compress === CompressionCodecEnum::NORMAL) {
-            $attributes = Int8::value(CompressionCodecEnum::NORMAL);
-        } elseif ($compress === CompressionCodecEnum::SNAPPY) {
-            $attributes = Int8::value(CompressionCodecEnum::SNAPPY);
-        } elseif ($compress === CompressionCodecEnum::GZIP) {
-            $attributes = Int8::value(CompressionCodecEnum::GZIP);
-        } else {
-            throw new \RuntimeException('Todo Lz4 Compress');
-        }
-//        $listOffsets = ListOffsetsApi::getInstance()->getListOffsets($topic, [$assignPartition]);
-//        ['highWatermark' => $highWatermark] = current($listOffsets);
-
-        $messageSets = [];
 
         while ($repeat > 0) {
-            $messageSets[] = (new MessageSetProduce())->setOffset(Int64::value(-1))
-                                                      ->setMessage(
-                                                          (new MessageProduce())->setAttributes($attributes)
-                                                                                ->setValue(Bytes32::value($message))
-                                                      );
+            $messages[] = $message;
             $repeat--;
         }
 
-        $protocol = new ProduceRequest();
-        $protocol->setAcks(Int16::value(1))
-                 ->setTimeout(Int32::value(1 * 1000))
-                 ->setTopicData([
-                     (new TopicDataProduce())->setTopic(String16::value($topic))
-                                             ->setData([
-                                                 (new DataProduce())->setPartition(Int32::value($assignPartition))
-                                                                    ->setMessageSet($messageSets)
-                                             ])
-                 ]);
-        $data = $protocol->pack();
-        $socket = Kafka::getInstance()->getSocketByNodeId($topicPartitionLeader[$assignPartition]);
-        $socket->send($data);
-        $socket->revcByKafka($protocol);
-        /** @var ProduceResponse $responses */
-        $responses = $protocol->response;
-        foreach ($responses->getResponses() as $response) {
-            $info = $response->getPartitionResponses()[0];
-            if (
-                in_array($info->getErrorCode()->getValue(),
-                    [ProtocolErrorEnum::UNKNOWN_TOPIC_OR_PARTITION, ProtocolErrorEnum::NOT_LEADER_FOR_PARTITION])
-                &&
-                $info->getBaseOffset()->getValue() === -1
-            ) {
-                goto Send;
-            }
+        if(empty($brokersList)){
+            $brokersList = App::$commonConfig->getMetadataBrokerList();
         }
+        $conn = 'producer-command';
+        ProducerApi::getInstance()->setBrokerListMap($conn, $brokersList);
+        ProducerApi::getInstance()->produce($conn, $topic, $partition, $key, $messages, $compress);
+        $responses = ProducerApi::getInstance()->getOrSetLastResponse();
         $result = $responses->toArray();
         (new ProducerOutput())->output(new SymfonyStyle($input, $output), $result);
     }

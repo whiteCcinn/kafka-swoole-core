@@ -261,10 +261,11 @@ class CoreSubscriber implements EventSubscriberInterface
                 }
 
                 foreach (ClientKafka::getInstance()->getSelfLeaderTopicPartition() as $leaderId => $topicPartitions) {
-                    $setTopics = [];
+                    // TODO: Protocol encapsulation problem, resulting in two RTT
                     foreach ($topicPartitions as $topic => $partitions) {
-                        $topicsFetch = (new TopicsFetch())->setTopic(String16::value($topic));
+                        $setTopics = [];
                         $setPartitions = [];
+                        $topicsFetch = (new TopicsFetch())->setTopic(String16::value($topic));
                         foreach ($partitions as $partition) {
                             $partitionsFetch = (new PartitionsFetch())->setPartition(Int32::value($partition))
                                                                       ->setFetchOffset(Int64::value(
@@ -278,41 +279,43 @@ class CoreSubscriber implements EventSubscriberInterface
                             $setPartitions[] = $partitionsFetch;
                         }
                         $setTopics[] = $topicsFetch->setPartitions($setPartitions);
-                    }
 
-                    // todo : config setting
-                    $fetchRequest->setTopics($setTopics)->setMinBytes(Int32::value(1000))
-                                 ->setMaxWaitTime(Int32::value(1000));
-                    $data = $fetchRequest->pack();
-                    $socket = Kafka::getInstance()->getSocketByNodeId($leaderId);
-                    $socket->send($data);
-                    $socket->revcByKafka($fetchRequest);
+                        // todo : config setting
+                        $fetchRequest->setTopics($setTopics)->setMinBytes(Int32::value(1000))
+                                     ->setMaxWaitTime(Int32::value(1000));
+                        $data = $fetchRequest->pack();
+                        $socket = Kafka::getInstance()->getSocketByNodeId($leaderId);
+                        $socket->send($data);
+                        $socket->revcByKafka($fetchRequest);
 
-                    /** @var FetchResponse $response */
-                    $response = $fetchRequest->response;
-                    $messages = [];
-                    foreach ($response->getResponses() as $responses) {
-                        foreach ($responses->getPartitionResponses() as $partitionResponse) {
-                            if ($partitionResponse->getPartitionHeader()
-                                                  ->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
-                                throw new FetchRequestException(sprintf('FetchRequest request error, the error message is: %s',
-                                    ProtocolErrorEnum::getTextByCode($partitionResponse->getPartitionHeader()
-                                                                                       ->getErrorCode()->getValue())));
-                            }
+                        /** @var FetchResponse $response */
+                        $response = $fetchRequest->response;
+                        $messages = [];
+                        foreach ($response->getResponses() as $responses) {
+                            foreach ($responses->getPartitionResponses() as $partitionResponse) {
+                                if ($partitionResponse->getPartitionHeader()
+                                                      ->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
+                                    throw new FetchRequestException(sprintf('FetchRequest request error, the error message is: %s',
+                                        ProtocolErrorEnum::getTextByCode($partitionResponse->getPartitionHeader()
+                                                                                           ->getErrorCode()
+                                                                                           ->getValue())));
+                                }
 
-                            foreach ($partitionResponse->getRecordSet() as $recordSet) {
-                                $messages[] = [
-                                    'topic'     => $responses->getTopic()->getValue(),
-                                    'partition' => $partitionResponse->getPartitionHeader()->getPartition()->getValue(),
-                                    'offset'    => $recordSet->getOffset()->getValue(),
-                                    'message'   => $recordSet->getMessage()->getValue()->getValue()
-                                ];
+                                foreach ($partitionResponse->getRecordSet() as $recordSet) {
+                                    $messages[] = [
+                                        'topic'     => $responses->getTopic()->getValue(),
+                                        'partition' => $partitionResponse->getPartitionHeader()->getPartition()
+                                                                         ->getValue(),
+                                        'offset'    => $recordSet->getOffset()->getValue(),
+                                        'message'   => $recordSet->getMessage()->getValue()->getValue()
+                                    ];
+                                }
                             }
                         }
-                    }
 
-                    if (!empty($messages)) {
-                        dispatch(new FetchMessagesEvent($messages), FetchMessagesEvent::NAME);
+                        if (!empty($messages)) {
+                            dispatch(new FetchMessagesEvent($messages), FetchMessagesEvent::NAME);
+                        }
                     }
                 }
             }
@@ -615,9 +618,10 @@ class CoreSubscriber implements EventSubscriberInterface
 
         /** @var OffsetFetchResponse $response */
         $response = $offsetFetchRequest->response;
+        $pass = [];
         try {
-            $needChangeApiVersion = true;
-            foreach ($response->getResponses() as $response) {
+            foreach ($response->getResponses() as $k => $response) {
+                $needChangeApiVersion = true;
                 foreach ($response->getPartitionResponses() as $partitionResponse) {
                     // need change api version
 
@@ -642,6 +646,8 @@ class CoreSubscriber implements EventSubscriberInterface
                 throw new ClientException(
                     sprintf('Offset does not exist in zookeeper, but in kafka. Therefore, API version needs to be changed')
                 );
+            } else {
+                $pass = [$k];
             }
         } catch (ClientException $exception) {
             $offsetFetchRequest->getRequestHeader()
@@ -651,7 +657,10 @@ class CoreSubscriber implements EventSubscriberInterface
             $socket->revcByKafka($offsetFetchRequest);
             /** @var OffsetFetchResponse $response */
             $response = $offsetFetchRequest->response;
-            foreach ($response->getResponses() as $response) {
+            foreach ($response->getResponses() as $k => $response) {
+                if (in_array($k, $pass)) {
+                    continue;
+                }
                 foreach ($response->getPartitionResponses() as $partitionResponse) {
                     if ($partitionResponse->getErrorCode()->getValue() !== ProtocolErrorEnum::NO_ERROR) {
                         throw new OffsetFetchRequestException(sprintf('Api Version 1, OffsetFetchRequest request error, the error message is: %s',

@@ -158,6 +158,7 @@ class ProducerApi extends AbstractApi
             $socket->revcByKafka($protocol);
             /** @var ProduceResponse $responses */
             $responses = $protocol->response;
+            $this->getOrSetLastResponse($responses);
             foreach ($responses->getResponses() as $response) {
                 $info = $response->getPartitionResponses()[0];
                 if (
@@ -209,5 +210,16 @@ class ProducerApi extends AbstractApi
         }
 
         return $socket;
+    }
+
+    public function getOrSetLastResponse($response = null)
+    {
+        static $staticResponse;
+
+        if ($response !== null) {
+            $staticResponse = $response;
+        }
+
+        return $staticResponse;
     }
 }
